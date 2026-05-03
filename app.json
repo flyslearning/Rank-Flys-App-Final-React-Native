@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "ec47a234-d2c3-4cc5-bd12-885a2612fb4f"
+      }
+    },
+    "android": {
+      "package": "com.RankFly.testseries"
+    }
+  }
+}
