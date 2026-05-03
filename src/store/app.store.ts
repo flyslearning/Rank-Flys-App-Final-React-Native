@@ -13,12 +13,33 @@ export const useAppStore = create<AppState>((set) => ({
   hasSeenIntro: false,
 
   loadApp: async () => {
-    const seen = await storage.get<string>("has_seen_intro");
+    try {
+      // 🔹 intro flag
+      const seen = await storage.get<string>("has_seen_intro");
 
-    set({
-      hasSeenIntro: seen === "true",
-      isAppReady: true,
-    });
+      // 🔹 check if user already logged in
+      const accessToken = await storage.get<string>("access_token");
+
+      // 🔥 IMPORTANT LOGIC
+      const shouldMarkIntroSeen = seen === "true" || !!accessToken;
+
+      // 🔹 if user logged in but intro not saved → save it
+      if (shouldMarkIntroSeen && seen !== "true") {
+        await storage.set("has_seen_intro", "true");
+      }
+
+      set({
+        hasSeenIntro: shouldMarkIntroSeen,
+        isAppReady: true,
+      });
+    } catch (error) {
+      console.log("App load error:", error);
+
+      set({
+        hasSeenIntro: false,
+        isAppReady: true,
+      });
+    }
   },
 
   completeIntro: async () => {

@@ -3,14 +3,19 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   Animated,
   StatusBar,
 } from "react-native";
 
+import { useAppStore } from "../../store/app.store";
+import { useAuthStore } from "../../store/auth.store";
+
 export default function SplashScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
+
+  const hasSeenIntro = useAppStore((s) => s.hasSeenIntro);
+  const accessToken = useAuthStore((s) => s.accessToken);
 
   useEffect(() => {
     Animated.parallel([
@@ -25,13 +30,16 @@ export default function SplashScreen() {
         useNativeDriver: true,
       }),
     ]).start();
+
+    // 🔥 Debug (optional)
+    console.log("Intro seen:", hasSeenIntro);
+    console.log("Token:", accessToken);
   }, []);
 
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
-      {/* Logo */}
       <Animated.Image
         source={require("../../assets/images/logo.png")}
         style={[
@@ -44,12 +52,10 @@ export default function SplashScreen() {
         resizeMode="contain"
       />
 
-      {/* App Name */}
       <Animated.Text style={[styles.title, { opacity: fadeAnim }]}>
         Rank Flys
       </Animated.Text>
 
-      {/* Tagline */}
       <Animated.Text style={[styles.subtitle, { opacity: fadeAnim }]}>
         Smart Learning. Better Results.
       </Animated.Text>
@@ -64,19 +70,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
   logo: {
-    width: 180,   // 🔥 bigger logo
+    width: 180,
     height: 180,
   },
-
   title: {
     marginTop: 20,
     fontSize: 32,
     fontWeight: "900",
     color: "#0f172a",
   },
-
   subtitle: {
     marginTop: 6,
     fontSize: 15,

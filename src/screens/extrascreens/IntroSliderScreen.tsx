@@ -66,9 +66,9 @@ export default function IntroSliderScreen() {
     animateButton();
 
     if (index === slides.length - 1) {
-      await completeIntro();
-      return;
-    }
+    await completeIntro();
+    return;
+  }
 
     flatListRef.current?.scrollToIndex({
       index: index + 1,

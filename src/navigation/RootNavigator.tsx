@@ -2,8 +2,11 @@ import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../types";
-import { useAuthStore } from "../store/auth.store";
 
+import { useAuthStore } from "../store/auth.store";
+import { useAppStore } from "../store/app.store";
+
+import IntroSliderScreen from "../screens/extrascreens/IntroSliderScreen";
 import SendOtpScreen from "../screens/authscreens/SendOtpScreen";
 import VerifyOtpScreen from "../screens/authscreens/VerifyOtpScreen";
 import OnboardingScreen from "../screens/authscreens/OnboardingScreen";
@@ -21,22 +24,28 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
   const accessToken = useAuthStore((s) => s.accessToken);
+  const hasSeenIntro = useAppStore((s) => s.hasSeenIntro);
+
+  const isLoggedIn = !!accessToken;
 
   return (
     <NavigationContainer>
-      <Stack.Navigator>
-        {!accessToken ? (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!hasSeenIntro ? (
+          <Stack.Screen
+            name="IntroSlider"
+            component={IntroSliderScreen}
+          />
+        ) : !isLoggedIn ? (
           <>
             <Stack.Screen
               name="SendOtp"
               component={SendOtpScreen}
-              options={{ headerShown: false }}
             />
 
             <Stack.Screen
               name="VerifyOtp"
               component={VerifyOtpScreen}
-              options={{ headerShown: false }}
             />
           </>
         ) : (
@@ -44,60 +53,59 @@ export default function RootNavigator() {
             <Stack.Screen
               name="Home"
               component={HomeScreen}
-              options={{ headerShown: false }}
             />
 
             <Stack.Screen
               name="Onboarding"
               component={OnboardingScreen}
-              options={{ headerShown: false }}
             />
 
             <Stack.Screen
               name="TestSeries"
               component={TestSeriesScreen}
-              options={{ title: "Test Series" }}
+              options={{ headerShown: true, title: "Test Series" }}
             />
 
             <Stack.Screen
               name="Tests"
               component={TestsScreen}
-              options={{ title: "Tests" }}
+              options={{ headerShown: true, title: "Tests" }}
             />
 
             <Stack.Screen
               name="TestAttempt"
               component={TestAttemptScreen}
-              options={{ title: "Attempt Test" }}
+              options={{ headerShown: true, title: "Attempt Test" }}
             />
 
             <Stack.Screen
               name="Attempts"
               component={AttemptsScreen}
-              options={{ title: "Previous Attempts" }}
+              options={{ headerShown: true, title: "Previous Attempts" }}
             />
 
             <Stack.Screen
               name="Result"
               component={ResultScreen}
-              options={{ title: "Result" }}
+              options={{ headerShown: true, title: "Result" }}
             />
-            <Stack.Screen
-                    name="EbookSeries"
-                    component={EbookSeriesScreen}
-                    options={{ title: "Ebook Library" }}
-                      />
 
-                <Stack.Screen
-                  name="EbookNodes"
-                  component={EbookNodesScreen}
-                  options={{ title: "Ebook Content" }}
-                />
-                  <Stack.Screen
-                      name="PdfViewer"
-                      component={PdfViewerScreen}
-                      options={{ headerShown: false }}
-                    />
+            <Stack.Screen
+              name="EbookSeries"
+              component={EbookSeriesScreen}
+              options={{ headerShown: true, title: "Ebook Library" }}
+            />
+
+            <Stack.Screen
+              name="EbookNodes"
+              component={EbookNodesScreen}
+              options={{ headerShown: true, title: "Ebook Content" }}
+            />
+
+            <Stack.Screen
+              name="PdfViewer"
+              component={PdfViewerScreen}
+            />
           </>
         )}
       </Stack.Navigator>
