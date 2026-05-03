@@ -77,11 +77,12 @@ const styles = StyleSheet.create({
   title: {
     marginTop: 20,
     fontSize: 32,
-    fontWeight: "900",
+    fontWeight: "100",
+    fontFamily: "TitanOne",
     color: "#0f172a",
   },
   subtitle: {
-    marginTop: 6,
+    marginTop: 10,
     fontSize: 15,
     color: "#090909",
     fontWeight: "600",

@@ -1,6 +1,8 @@
 export type RootStackParamList = {
+
   SendOtp: undefined;
   VerifyOtp: { mobile: string };
+   MainTabs: undefined;
   Onboarding: undefined;
   Home: undefined;
   TestSeries: undefined;

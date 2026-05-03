@@ -66,7 +66,7 @@ export default function VerifyOtpScreen({ route, navigation }: Props) {
       await setTokens(accessToken, refreshToken);
 
       navigation.replace(
-        res.data?.next === "onboarding" ? "Onboarding" : "Home"
+        res.data?.next === "onboarding" ? "Onboarding" : "MainTabs"
       );
     } catch (error) {
       Alert.alert("Verification Failed", "Invalid or expired OTP");

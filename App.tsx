@@ -26,26 +26,29 @@ export default function App() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
 
-    const init = async () => {
+    async function initApp() {
       try {
-        await Promise.all([loadTokens(), loadApp()]);
-      } catch (e) {
-        console.log("App Init Error:", e);
+        await Promise.all([
+          loadTokens(),
+          loadApp(),
+        ]);
+      } catch (error) {
+        console.log("App Init Error:", error);
       } finally {
         timer = setTimeout(() => {
           setShowCustomSplash(false);
         }, 1500);
       }
-    };
+    }
 
-    init();
+    initApp();
 
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, []);
+  }, [loadTokens, loadApp]);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !authReady || !appReady) {
     return (
       <View
         style={{
@@ -60,7 +63,7 @@ export default function App() {
     );
   }
 
-  if (showCustomSplash || !authReady || !appReady) {
+  if (showCustomSplash) {
     return <SplashScreen />;
   }
 
