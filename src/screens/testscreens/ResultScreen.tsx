@@ -185,7 +185,7 @@ export default function ResultScreen({ route }: Props) {
         <View style={styles.statsGrid}>
           <View style={styles.statCard}>
             <Ionicons name="analytics-outline" size={22} color="#2563eb" />
-            <Text style={styles.statValue}>{attempt.accuracy}%</Text>
+            <Text style={styles.statValue}>{attempt.accuracy.toFixed(1)}%</Text>
             <Text style={styles.statLabel}>Accuracy</Text>
           </View>
 

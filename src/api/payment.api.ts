@@ -1,0 +1,30 @@
+import { paymentClient } from "./client";
+
+export type ContentType = "test_series" | "ebook_series";
+
+export const PaymentAPI = {
+  createOrder: async (payload: {
+    content_id: string;
+    content_type: ContentType;
+  }) => {
+    const res = await paymentClient.post("/payments/orders", payload);
+    return res.data;
+  },
+
+  verify: async (payload: {
+    provider_order_id: string;
+    provider_payment_id: string;
+    signature: string;
+  }) => {
+    const res = await paymentClient.post("/payments/verify", payload);
+    return res.data;
+  },
+};
+
+export const checkAccess = async (params: {
+  content_id: string;
+  content_type: ContentType;
+}) => {
+  const res = await paymentClient.get("/payments/access", { params });
+  return res.data;
+};

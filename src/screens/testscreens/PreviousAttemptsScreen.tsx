@@ -202,7 +202,7 @@ export default function AttemptsScreen({ route, navigation }: Props) {
 
             <View style={styles.accuracyCircle}>
               <Text style={[styles.accuracyValue, { color: accuracyColor }]}>
-                {item.accuracy}%
+                {item.accuracy.toFixed(1)}%
               </Text>
               <Text style={styles.accuracyLabel}>Accuracy</Text>
             </View>

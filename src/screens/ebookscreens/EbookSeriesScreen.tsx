@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -18,23 +18,91 @@ import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, EbookSeriesItem } from "../../types";
 import { EbookAPI } from "../../api/ebook.api";
+import { startPayment } from "../../utils/payment";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EbookSeries">;
 
+type EbookSeriesWithCount = EbookSeriesItem & {
+  filesCount?: number;
+  price?: number;
+  price_paise?: number;
+  is_free?: boolean;
+  has_access?: boolean;
+  image_url?: any;
+};
+
 export default function EbookSeriesScreen({ navigation }: Props) {
-  const [series, setSeries] = useState<EbookSeriesItem[]>([]);
+  const [series, setSeries] = useState<EbookSeriesWithCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+
+  const getImageUrl = (item: EbookSeriesWithCount) => {
+    if (!item.image_url) return "";
+
+    if (typeof item.image_url === "string") {
+      return item.image_url.trim();
+    }
+
+    if (item.image_url?.Valid && item.image_url?.String) {
+      return item.image_url.String;
+    }
+
+    return "";
+  };
+
+  const getPrice = (item: EbookSeriesWithCount) => {
+    if (item.is_free) return "FREE";
+    if (typeof item.price === "number") return `₹${item.price}`;
+    return `₹${(item.price_paise || 0) / 100}`;
+  };
+
+  const getEbookFilesCount = async (seriesId: string) => {
+    try {
+      const res = await (EbookAPI as any).getNodes(seriesId);
+
+      const nodes = res.data?.data || res.data || [];
+
+      return nodes.filter((node: any) => {
+        return node.type === "file" || node.type === "pdf";
+      }).length;
+    } catch (error: any) {
+      console.log(
+        "Ebook files count error:",
+        seriesId,
+        error?.response?.data || error.message
+      );
+      return 0;
+    }
+  };
 
   const loadSeries = useCallback(async () => {
     try {
       setLoading(true);
 
       const res = await EbookAPI.getSeries();
-      const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
+      const seriesList = Array.isArray(res.data)
+        ? res.data
+        : res.data?.data || [];
 
-      setSeries(data);
+      const sortedSeries = [...seriesList].sort(
+        (a: any, b: any) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime()
+      );
+
+      const seriesWithCounts = await Promise.all(
+        sortedSeries.map(async (item: EbookSeriesWithCount) => {
+          const filesCount = await getEbookFilesCount(item.id);
+
+          return {
+            ...item,
+            filesCount,
+          };
+        })
+      );
+
+      setSeries(seriesWithCounts);
     } catch (error: any) {
       console.log("Ebook series error:", error?.response?.data || error.message);
       Alert.alert("Error", "Ebook series load failed");
@@ -43,68 +111,102 @@ export default function EbookSeriesScreen({ navigation }: Props) {
     }
   }, []);
 
+  useEffect(() => {
+    loadSeries();
+  }, [loadSeries]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await loadSeries();
     setRefreshing(false);
   };
 
-  useEffect(() => {
-    loadSeries();
-  }, [loadSeries]);
-
-  const uniqueSeries = useMemo(() => {
-    const map = new Map<string, EbookSeriesItem>();
-
-    series.forEach((item) => {
-      map.set(`${item.id}-${item.title}`, item);
-    });
-
-    return Array.from(map.values());
-  }, [series]);
-
   const filteredSeries = useMemo(() => {
     const keyword = search.trim().toLowerCase();
-    if (!keyword) return uniqueSeries;
 
-    return uniqueSeries.filter((item) => {
+    const unique = Array.from(
+      new Map(series.map((item) => [item.id, item])).values()
+    );
+
+    if (!keyword) return unique;
+
+    return unique.filter((item) => {
       const title = item.title?.toLowerCase() || "";
       const description = item.description?.toLowerCase() || "";
+
       return title.includes(keyword) || description.includes(keyword);
     });
-  }, [uniqueSeries, search]);
+  }, [series, search]);
 
-  const renderCard = ({ item }: { item: EbookSeriesItem }) => {
-    const imageUrl = item.image_url || "";
+  const openSeriesDetails = (item: EbookSeriesWithCount) => {
+    navigation.navigate("EbookNodes", {
+      seriesId: item.id,
+      seriesTitle: item.title,
+      parentId: null,
+      parentTitle: item.title,
+    });
+  };
+
+  const buySeries = (item: EbookSeriesWithCount) => {
+    startPayment({
+      contentId: item.id,
+      contentType: "ebook_series",
+      title: item.title,
+      onSuccess: loadSeries,
+    });
+  };
+
+  const renderCard = ({ item }: { item: EbookSeriesWithCount }) => {
+    const imageUrl = getImageUrl(item);
+
+    const isFree = item.is_free === true;
+    const hasAccess = item.has_access === true;
+    const isLockedPaid = !isFree && !hasAccess;
 
     return (
       <TouchableOpacity
-        activeOpacity={0.9}
+        activeOpacity={0.92}
         style={styles.card}
-        onPress={() =>
-          navigation.navigate("EbookNodes", {
-            seriesId: item.id,
-            seriesTitle: item.title,
-            parentId: null,
-            parentTitle: item.title,
-          })
-        }
+        onPress={() => openSeriesDetails(item)}
       >
         <View style={styles.imageWrap}>
           {imageUrl ? (
             <Image source={{ uri: imageUrl }} style={styles.seriesImage} />
           ) : (
             <View style={styles.placeholderImage}>
-              <Ionicons name="book-outline" size={44} color="#2563eb" />
+              <Ionicons
+                name={isLockedPaid ? "lock-closed-outline" : "book-outline"}
+                size={46}
+                color="#2563eb"
+              />
               <Text style={styles.placeholderText}>Ebook Series</Text>
             </View>
           )}
 
           <View style={styles.imageOverlay} />
 
+          <View style={styles.topBadge}>
+            <Ionicons
+              name={
+                isFree
+                  ? "gift-outline"
+                  : hasAccess
+                  ? "checkmark-circle-outline"
+                  : "lock-closed-outline"
+              }
+              size={15}
+              color="#ffffff"
+            />
+            <Text style={styles.topBadgeText}>
+              {isFree ? "FREE" : hasAccess ? "UNLOCKED" : "PAID"}
+            </Text>
+          </View>
+
           <View style={styles.testBadge}>
             <Ionicons name="library-outline" size={14} color="#ffffff" />
-            <Text style={styles.testBadgeText}>Ebook</Text>
+            <Text style={styles.testBadgeText}>
+              {item.filesCount || 0} Ebook Files
+            </Text>
           </View>
         </View>
 
@@ -117,18 +219,71 @@ export default function EbookSeriesScreen({ navigation }: Props) {
             {item.description || "Complete study material and ebook notes."}
           </Text>
 
-          <View style={styles.footerRow}>
-            <View style={styles.infoChip}>
-              <Ionicons name="document-text-outline" size={16} color="#475569" />
-              <Text style={styles.infoChipText}>Study Material</Text>
+          <View style={styles.metaRow}>
+            <View style={styles.miniChip}>
+              <Ionicons name="document-text-outline" size={15} color="#2563eb" />
+              <Text style={styles.miniChipText}>
+                {item.filesCount || 0} Files
+              </Text>
             </View>
 
-            <View style={styles.exploreBtn}>
+            <View style={styles.miniChip}>
+              <Ionicons
+                name={
+                  isFree || hasAccess
+                    ? "shield-checkmark-outline"
+                    : "wallet-outline"
+                }
+                size={15}
+                color="#2563eb"
+              />
+              <Text style={styles.miniChipText}>
+                {isFree ? "Free Access" : hasAccess ? "Purchased" : "Paid Series"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.priceBox}>
+            <View>
+              <Text style={styles.priceLabel}>
+                {isFree ? "Access Type" : hasAccess ? "Access Status" : "Series Price"}
+              </Text>
+              <Text style={styles.priceValue}>
+                {isFree ? "FREE" : hasAccess ? "Unlocked" : getPrice(item)}
+              </Text>
+            </View>
+
+            <View style={styles.priceIconWrap}>
+              <Ionicons
+                name={isFree || hasAccess ? "ribbon-outline" : "pricetag-outline"}
+                size={23}
+                color="#2563eb"
+              />
+            </View>
+          </View>
+
+          <View style={styles.buttonRow}>
+            {isLockedPaid && (
+              <TouchableOpacity
+                activeOpacity={0.86}
+                style={styles.buyBtn}
+                onPress={() => buySeries(item)}
+              >
+                <Ionicons name="cart-outline" size={17} color="#ffffff" />
+                <Text style={styles.buyText}>Buy Now</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              activeOpacity={0.86}
+              style={[styles.exploreBtn, !isLockedPaid && styles.fullExploreBtn]}
+              onPress={() => openSeriesDetails(item)}
+            >
               <Text style={styles.exploreText}>
                 {item.explore_text || "Explore Now"}
               </Text>
               <Ionicons name="chevron-forward" size={17} color="#ffffff" />
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
       </TouchableOpacity>
@@ -235,12 +390,11 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   searchInput: {
-    fontFamily: "Geologica",
     flex: 1,
     height: "100%",
     marginLeft: 10,
     fontSize: 15,
-    fontWeight: "100",
+    fontWeight: "700",
     color: "#0f172a",
   },
   clearBtn: {
@@ -264,14 +418,12 @@ const styles = StyleSheet.create({
   },
   resultTitle: {
     fontSize: 18,
-    fontWeight: "100",
-    fontFamily: "Geologica",
+    fontWeight: "900",
     color: "#0f172a",
   },
   resultCount: {
     fontSize: 13,
-    fontWeight: "100",
-    fontFamily: "Geologica",
+    fontWeight: "800",
     color: "#64748b",
   },
   card: {
@@ -314,6 +466,23 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(15,23,42,0.08)",
   },
+  topBadge: {
+    position: "absolute",
+    left: 14,
+    top: 14,
+    backgroundColor: "#111827",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  topBadgeText: {
+    marginLeft: 5,
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
   testBadge: {
     position: "absolute",
     right: 14,
@@ -347,13 +516,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#64748b",
   },
-  footerRow: {
-    marginTop: 18,
+  metaRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    gap: 10,
+    marginTop: 14,
   },
-  infoChip: {
+  miniChip: {
+    flex: 1,
     height: 40,
     paddingHorizontal: 12,
     borderRadius: 14,
@@ -361,24 +530,77 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  infoChipText: {
+  miniChipText: {
     marginLeft: 6,
     fontSize: 12,
     fontWeight: "900",
     color: "#475569",
   },
-  exploreBtn: {
+  priceBox: {
+    marginTop: 14,
+    backgroundColor: "#eff6ff",
+    borderRadius: 18,
+    padding: 14,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+  },
+  priceLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+  priceValue: {
+    marginTop: 3,
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#2563eb",
+  },
+  priceIconWrap: {
+    width: 42,
     height: 42,
-    paddingLeft: 15,
-    paddingRight: 11,
-    borderRadius: 14,
+    borderRadius: 15,
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  buttonRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    gap: 10,
+  },
+  buyBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 15,
+    backgroundColor: "#f97316",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  buyText: {
+    marginLeft: 6,
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  exploreBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 15,
     backgroundColor: "#2563eb",
     flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
+  },
+  fullExploreBtn: {
+    flex: 1,
   },
   exploreText: {
     color: "#ffffff",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     marginRight: 4,
   },
@@ -403,7 +625,6 @@ const styles = StyleSheet.create({
     borderColor: "#e5e7eb",
   },
   emptyTitle: {
-    fontFamily: "Geologica",
     marginTop: 12,
     fontSize: 19,
     fontWeight: "900",

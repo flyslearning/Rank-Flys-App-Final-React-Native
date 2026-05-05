@@ -7,7 +7,10 @@ export type RootStackParamList = {
   Home: undefined;
   TestSeries: undefined;
   Tests: { seriesId: string };
-  TestAttempt: { testId: string };
+  TestAttempt: { 
+  testId: string;
+  seriesId: string;
+   };
   Attempts: { testId: string };
   Result: { attemptId: string };
    EbookSeries: undefined;
@@ -86,6 +89,10 @@ export type EbookSeriesItem = {
   explore_text?: string | null;
   created_at?: string | null;
   goal_class_id?: string | null;
+  has_access?: boolean;
+  is_free?: boolean;
+  price?: number;
+  price_paise?: number;
 };
 
 export type EbookNode = {

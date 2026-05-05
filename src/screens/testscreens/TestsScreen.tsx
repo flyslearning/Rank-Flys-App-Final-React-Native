@@ -105,7 +105,12 @@ export default function TestsScreen({ route, navigation }: Props) {
         <TouchableOpacity
           activeOpacity={0.9}
           style={styles.primaryBtn}
-          onPress={() => navigation.navigate("TestAttempt", { testId: item.id })}
+          onPress={() =>
+            navigation.navigate("TestAttempt", {
+              testId: item.id,
+              seriesId: seriesId,
+            })
+          }
         >
           <Text style={styles.primaryText}>Start Test</Text>
           <Ionicons name="chevron-forward" size={18} color="#ffffff" />

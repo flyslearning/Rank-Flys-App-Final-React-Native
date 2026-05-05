@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
 
   bottom: {
     padding: 24,
-    paddingBottom: 40,
+    paddingBottom: 60,
   },
 
   dots: {
@@ -311,6 +311,7 @@ const styles = StyleSheet.create({
   nextButton: {
     backgroundColor: "#2563eb",
     paddingVertical: 16,
+
     borderRadius: 18,
     alignItems: "center",
     elevation: 5,

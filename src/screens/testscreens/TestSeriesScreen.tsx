@@ -17,11 +17,17 @@ import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, TestSeries } from "../../types";
 import { TestAPI } from "../../api/test.api";
+import { startPayment } from "../../utils/payment";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TestSeries">;
 
 type SeriesWithCount = TestSeries & {
-  testsCount: number;
+  testsCount?: number;
+  price?: number;
+  price_paise?: number;
+  is_free?: boolean;
+  has_access?: boolean;
+  created_at?: string;
 };
 
 export default function TestSeriesScreen({ navigation }: Props) {
@@ -29,27 +35,39 @@ export default function TestSeriesScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
+  const getSeriesTestsCount = async (seriesId: string) => {
+    try {
+      const res = await TestAPI.getTestsBySeries(seriesId);
+      return res.data?.data?.length || 0;
+    } catch (error: any) {
+      console.log(
+        "Tests count error:",
+        seriesId,
+        error.response?.data || error.message
+      );
+      return 0;
+    }
+  };
+
   const loadSeries = useCallback(async () => {
     try {
       setLoading(true);
 
       const res = await TestAPI.getTestSeries();
-      const seriesList: TestSeries[] = res.data?.data || [];
+      const seriesList = res.data?.data || [];
 
-      const seriesWithCounts: SeriesWithCount[] = await Promise.all(
-        seriesList.map(async (item) => {
-          try {
-            const testsRes = await TestAPI.getTestsBySeries(item.id);
-            return {
-              ...item,
-              testsCount: testsRes.data?.data?.length || 0,
-            };
-          } catch {
-            return {
-              ...item,
-              testsCount: 0,
-            };
-          }
+      const sortedSeries = [...seriesList].sort(
+        (a: any, b: any) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      const seriesWithCounts = await Promise.all(
+        sortedSeries.map(async (item: SeriesWithCount) => {
+          const testsCount = await getSeriesTestsCount(item.id);
+          return {
+            ...item,
+            testsCount,
+          };
         })
       );
 
@@ -77,33 +95,73 @@ export default function TestSeriesScreen({ navigation }: Props) {
     });
   }, [series, search]);
 
+  const openSeriesDetails = (item: SeriesWithCount) => {
+    navigation.navigate("Tests", { seriesId: item.id });
+  };
+
+  const buySeries = (item: SeriesWithCount) => {
+    startPayment({
+      contentId: item.id,
+      contentType: "test_series",
+      title: item.title,
+      onSuccess: loadSeries,
+    });
+  };
+
+  const getPrice = (item: SeriesWithCount) => {
+    if (item.is_free) return "FREE";
+    if (typeof item.price === "number") return `₹${item.price}`;
+    return `₹${(item.price_paise || 0) / 100}`;
+  };
+
   const renderCard = ({ item }: { item: SeriesWithCount }) => {
     const imageUrl =
       item.image_url?.Valid && item.image_url?.String
         ? item.image_url.String
         : "";
 
+    const isFree = item.is_free;
+    const hasAccess = item.has_access;
+    const isLockedPaid = !isFree && !hasAccess;
+
     return (
       <TouchableOpacity
-        activeOpacity={0.9}
+        activeOpacity={0.92}
         style={styles.card}
-        onPress={() => navigation.navigate("Tests", { seriesId: item.id })}
+        onPress={() => openSeriesDetails(item)}
       >
         <View style={styles.imageWrap}>
           {imageUrl ? (
             <Image source={{ uri: imageUrl }} style={styles.seriesImage} />
           ) : (
             <View style={styles.placeholderImage}>
-              <Ionicons name="school-outline" size={44} color="#2563eb" />
+              <Ionicons name="school-outline" size={46} color="#2563eb" />
               <Text style={styles.placeholderText}>Test Series</Text>
             </View>
           )}
 
           <View style={styles.imageOverlay} />
 
+          <View style={styles.topBadge}>
+            <Ionicons
+              name={
+                isFree
+                  ? "gift-outline"
+                  : hasAccess
+                  ? "checkmark-circle-outline"
+                  : "lock-closed-outline"
+              }
+              size={15}
+              color="#ffffff"
+            />
+            <Text style={styles.topBadgeText}>
+              {isFree ? "FREE" : hasAccess ? "UNLOCKED" : "PAID"}
+            </Text>
+          </View>
+
           <View style={styles.testBadge}>
             <Ionicons name="layers-outline" size={14} color="#ffffff" />
-            <Text style={styles.testBadgeText}>{item.testsCount} Tests</Text>
+            <Text style={styles.testBadgeText}>{item.testsCount || 0} Tests</Text>
           </View>
         </View>
 
@@ -116,18 +174,65 @@ export default function TestSeriesScreen({ navigation }: Props) {
             {item.description || "Practice with exam-focused mock tests."}
           </Text>
 
-          <View style={styles.footerRow}>
-            <View style={styles.infoChip}>
-              <Ionicons name="document-text-outline" size={16} color="#475569" />
-              <Text style={styles.infoChipText}>Mock Practice</Text>
+          <View style={styles.metaRow}>
+            <View style={styles.miniChip}>
+              <Ionicons name="document-text-outline" size={15} color="#2563eb" />
+              <Text style={styles.miniChipText}>{item.testsCount || 0} Tests</Text>
             </View>
 
-            <View style={styles.exploreBtn}>
+            <View style={styles.miniChip}>
+              <Ionicons
+                name={isFree || hasAccess ? "shield-checkmark-outline" : "wallet-outline"}
+                size={15}
+                color="#2563eb"
+              />
+              <Text style={styles.miniChipText}>
+                {isFree ? "Free Access" : hasAccess ? "Purchased" : "Paid Series"}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.priceBox}>
+            <View>
+              <Text style={styles.priceLabel}>
+                {isFree ? "Access Type" : hasAccess ? "Access Status" : "Series Price"}
+              </Text>
+              <Text style={styles.priceValue}>
+                {isFree ? "FREE" : hasAccess ? "Unlocked" : getPrice(item)}
+              </Text>
+            </View>
+
+            <View style={styles.priceIconWrap}>
+              <Ionicons
+                name={isFree || hasAccess ? "ribbon-outline" : "pricetag-outline"}
+                size={23}
+                color="#2563eb"
+              />
+            </View>
+          </View>
+
+          <View style={styles.buttonRow}>
+            {isLockedPaid && (
+              <TouchableOpacity
+                activeOpacity={0.86}
+                style={styles.buyBtn}
+                onPress={() => buySeries(item)}
+              >
+                <Ionicons name="cart-outline" size={17} color="#ffffff" />
+                <Text style={styles.buyText}>Buy Now</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              activeOpacity={0.86}
+              style={[styles.exploreBtn, !isLockedPaid && styles.fullExploreBtn]}
+              onPress={() => openSeriesDetails(item)}
+            >
               <Text style={styles.exploreText}>
                 {item.explore_text || "Explore Now"}
               </Text>
               <Ionicons name="chevron-forward" size={17} color="#ffffff" />
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
       </TouchableOpacity>
@@ -272,16 +377,16 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: 24,
-    marginBottom: 18,
+    borderRadius: 26,
+    marginBottom: 20,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#dbeafe",
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.1,
-    shadowRadius: 22,
-    elevation: 7,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.13,
+    shadowRadius: 25,
+    elevation: 9,
   },
   imageWrap: {
     width: "100%",
@@ -308,7 +413,24 @@ const styles = StyleSheet.create({
   },
   imageOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,23,42,0.08)",
+    backgroundColor: "rgba(15,23,42,0.14)",
+  },
+  topBadge: {
+    position: "absolute",
+    left: 14,
+    top: 14,
+    backgroundColor: "#2563eb",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  topBadgeText: {
+    marginLeft: 5,
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
   },
   testBadge: {
     position: "absolute",
@@ -343,34 +465,91 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#64748b",
   },
-  footerRow: {
-    marginTop: 18,
+  metaRow: {
+    marginTop: 13,
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    gap: 9,
+    flexWrap: "wrap",
   },
-  infoChip: {
-    height: 40,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+  miniChip: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 999,
     backgroundColor: "#f1f5f9",
     flexDirection: "row",
     alignItems: "center",
   },
-  infoChipText: {
-    marginLeft: 6,
+  miniChipText: {
+    marginLeft: 5,
     fontSize: 12,
     fontWeight: "900",
-    color: "#475569",
+    color: "#334155",
+  },
+  priceBox: {
+    marginTop: 15,
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+    borderRadius: 18,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  priceLabel: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#64748b",
+  },
+  priceValue: {
+    marginTop: 3,
+    fontSize: 21,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  priceIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  buttonRow: {
+    marginTop: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  buyBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: "#16a34a",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  buyText: {
+    marginLeft: 6,
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "900",
   },
   exploreBtn: {
-    height: 42,
+    flex: 1,
+    height: 46,
     paddingLeft: 15,
     paddingRight: 11,
-    borderRadius: 14,
+    borderRadius: 16,
     backgroundColor: "#2563eb",
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+  },
+  fullExploreBtn: {
+    flex: 1,
   },
   exploreText: {
     color: "#ffffff",

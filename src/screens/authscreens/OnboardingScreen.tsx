@@ -119,7 +119,7 @@ export default function OnboardingScreen({ navigation }: Props) {
         class_id: classId,
       });
 
-      navigation.replace("Home");
+      navigation.replace("MainTabs");
     } catch {
       Alert.alert("Profile update failed");
     } finally {

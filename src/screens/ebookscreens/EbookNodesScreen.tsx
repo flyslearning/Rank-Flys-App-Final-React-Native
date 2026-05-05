@@ -26,6 +26,7 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
   const { seriesId, seriesTitle, parentId, parentTitle } = route.params;
 
   const [nodes, setNodes] = useState<EbookNode[]>([]);
+  const [hasAccess, setHasAccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
@@ -60,17 +61,9 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
 
     const cleanUrl = fileUrl.trim();
 
-    if (cleanUrl.startsWith("https://")) {
-      return cleanUrl;
-    }
-
-    if (cleanUrl.startsWith("http://")) {
-      return null;
-    }
-
-    if (cleanUrl.includes("..")) {
-      return null;
-    }
+    if (cleanUrl.startsWith("https://")) return cleanUrl;
+    if (cleanUrl.startsWith("http://")) return null;
+    if (cleanUrl.includes("..")) return null;
 
     return `${PDF_BASE_URL}${encodeURIComponent(cleanUrl)}`;
   };
@@ -80,10 +73,14 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
       setLoading(true);
 
       const res = await EbookAPI.getNodes(seriesId, parentId || null);
+
       const data: EbookNode[] = Array.isArray(res.data)
         ? res.data
         : res.data?.data || [];
 
+      const access = res.data?.has_access === true;
+
+      setHasAccess(access);
       setNodes(sortNodesOrderWise(data));
     } catch (error: any) {
       console.log("Ebook nodes error:", error?.response?.data || error.message);
@@ -92,6 +89,10 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
       setLoading(false);
     }
   }, [seriesId, parentId]);
+
+  useEffect(() => {
+    loadNodes();
+  }, [loadNodes]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -133,7 +134,19 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
       .length;
   }, [uniqueNodes]);
 
+  const showPurchaseAlert = () => {
+    Alert.alert(
+      "Purchase Required",
+      "Please purchase this series first, then you can access ebook files."
+    );
+  };
+
   const openNode = async (node: EbookNode) => {
+    if (!hasAccess) {
+      showPurchaseAlert();
+      return;
+    }
+
     const type = normalizeNodeType(node);
 
     if (type === "folder") {
@@ -149,10 +162,7 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
     const securePdfUrl = getSecurePdfUrl(node.file_url);
 
     if (!securePdfUrl) {
-      Alert.alert(
-        "Invalid File",
-        "Only secure HTTPS PDF files are allowed."
-      );
+      Alert.alert("Invalid File", "Only secure HTTPS PDF files are allowed.");
       return;
     }
 
@@ -161,10 +171,6 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
       fileUrl: securePdfUrl,
     });
   };
-
-  useEffect(() => {
-    loadNodes();
-  }, [loadNodes]);
 
   const renderNode = ({ item }: { item: EbookNode }) => {
     const type = normalizeNodeType(item);
@@ -183,9 +189,15 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
           ]}
         >
           <Ionicons
-            name={isFolder ? "folder-open-outline" : "document-text-outline"}
+            name={
+              !hasAccess
+                ? "lock-closed-outline"
+                : isFolder
+                ? "folder-open-outline"
+                : "document-text-outline"
+            }
             size={34}
-            color={isFolder ? "#d97706" : "#2563eb"}
+            color={!hasAccess ? "#f97316" : isFolder ? "#d97706" : "#2563eb"}
           />
         </View>
 
@@ -198,9 +210,9 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
               ]}
             >
               <Ionicons
-                name={isFolder ? "albums-outline" : "reader-outline"}
+                name={!hasAccess ? "lock-closed-outline" : isFolder ? "albums-outline" : "reader-outline"}
                 size={13}
-                color={isFolder ? "#92400e" : "#1d4ed8"}
+                color={!hasAccess ? "#c2410c" : isFolder ? "#92400e" : "#1d4ed8"}
               />
 
               <Text
@@ -209,12 +221,12 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
                   isFolder ? styles.folderBadgeText : styles.fileBadgeText,
                 ]}
               >
-                {isFolder ? "Folder" : "PDF / File"}
+                {!hasAccess ? "Locked" : isFolder ? "Folder" : "PDF / File"}
               </Text>
             </View>
 
             <Ionicons
-              name={isFolder ? "chevron-forward" : "open-outline"}
+              name={!hasAccess ? "lock-closed-outline" : isFolder ? "chevron-forward" : "open-outline"}
               size={21}
               color="#94a3b8"
             />
@@ -225,7 +237,9 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
           </Text>
 
           <Text style={styles.cardDescription} numberOfLines={2}>
-            {isFolder
+            {!hasAccess
+              ? "Purchase this series first, then you can access this ebook content."
+              : isFolder
               ? item.has_children
                 ? "Open this folder to view chapters and files."
                 : "Folder available for ebook content."
@@ -235,23 +249,27 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
           <View style={styles.footerRow}>
             <View style={styles.infoChip}>
               <Ionicons
-                name={isFolder ? "layers-outline" : "book-outline"}
+                name={!hasAccess ? "lock-closed-outline" : isFolder ? "layers-outline" : "book-outline"}
                 size={16}
                 color="#475569"
               />
 
               <Text style={styles.infoChipText}>
-                {isFolder ? "Chapter Folder" : "Reading Material"}
+                {!hasAccess
+                  ? "Purchase Required"
+                  : isFolder
+                  ? "Chapter Folder"
+                  : "Reading Material"}
               </Text>
             </View>
 
-            <View style={styles.exploreBtn}>
+            <View style={[styles.exploreBtn, !hasAccess && styles.lockedBtn]}>
               <Text style={styles.exploreText}>
-                {isFolder ? "Open" : "Read"}
+                {!hasAccess ? "Buy First" : isFolder ? "Open" : "Read"}
               </Text>
 
               <Ionicons
-                name={isFolder ? "chevron-forward" : "open-outline"}
+                name={!hasAccess ? "lock-closed-outline" : isFolder ? "chevron-forward" : "open-outline"}
                 size={17}
                 color="#ffffff"
               />
@@ -264,41 +282,29 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+      <SafeAreaView style={styles.safeArea}>
         <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
-
         <View style={styles.center}>
           <ActivityIndicator size="large" color="#2563eb" />
-          <Text style={styles.loadingText}>Loading content...</Text>
+          <Text style={styles.loadingText}>Loading ebooks...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
 
       <View style={styles.container}>
         <View style={styles.header}>
-          {parentId && (
-            <TouchableOpacity
-              activeOpacity={0.85}
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={19} color="#2563eb" />
-              <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-          )}
-
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={22} color="#64748b" />
 
             <TextInput
               value={search}
               onChangeText={setSearch}
-              placeholder="Search ebook content..."
+              placeholder="Search files or folders..."
               placeholderTextColor="#94a3b8"
               style={styles.searchInput}
             />
@@ -316,7 +322,7 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
 
         <FlatList
           data={filteredNodes}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item, index) => `${item.id}-${index}`}
           renderItem={renderNode}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
@@ -326,47 +332,48 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
           ListHeaderComponent={
             <View>
               <View style={styles.titleBox}>
-                <Text style={styles.pageLabel}>EBOOK CONTENT</Text>
-
-                <Text style={styles.pageTitle} numberOfLines={2}>
+                <Text style={styles.screenTitle} numberOfLines={2}>
                   {parentTitle || seriesTitle}
                 </Text>
 
-                <Text style={styles.pageSubtitle}>
-                  Open folders, chapters and PDF notes.
-                </Text>
+                <View
+                  style={[
+                    styles.accessBadge,
+                    hasAccess ? styles.accessBadgeOk : styles.accessBadgeLocked,
+                  ]}
+                >
+                  <Ionicons
+                    name={hasAccess ? "checkmark-circle-outline" : "lock-closed-outline"}
+                    size={14}
+                    color="#ffffff"
+                  />
+                  <Text style={styles.accessBadgeText}>
+                    {hasAccess ? "Access Available" : "Purchase Required"}
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.statsRow}>
                 <View style={styles.statCard}>
-                  <Ionicons name="folder-outline" size={19} color="#d97706" />
-                  <Text style={styles.statText}>{folderCount} Folders</Text>
+                  <Ionicons name="folder-outline" size={21} color="#d97706" />
+                  <Text style={styles.statValue}>{folderCount}</Text>
+                  <Text style={styles.statLabel}>Folders</Text>
                 </View>
 
                 <View style={styles.statCard}>
-                  <Ionicons
-                    name="document-text-outline"
-                    size={19}
-                    color="#2563eb"
-                  />
-                  <Text style={styles.statText}>{fileCount} Files</Text>
+                  <Ionicons name="document-text-outline" size={21} color="#2563eb" />
+                  <Text style={styles.statValue}>{fileCount}</Text>
+                  <Text style={styles.statLabel}>Files</Text>
                 </View>
-              </View>
-
-              <View style={styles.resultRow}>
-                <Text style={styles.resultTitle}>Available Content</Text>
-                <Text style={styles.resultCount}>
-                  {filteredNodes.length} found
-                </Text>
               </View>
             </View>
           }
           ListEmptyComponent={
             <View style={styles.emptyBox}>
-              <Ionicons name="file-tray-outline" size={46} color="#94a3b8" />
-              <Text style={styles.emptyTitle}>No content found</Text>
+              <Ionicons name="folder-open-outline" size={48} color="#94a3b8" />
+              <Text style={styles.emptyTitle}>No ebook content found</Text>
               <Text style={styles.emptyText}>
-                This folder does not have any chapters or files.
+                Try refreshing or searching another keyword.
               </Text>
             </View>
           }
@@ -377,30 +384,28 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: "#f8fafc" },
-  container: { flex: 1, backgroundColor: "#f8fafc" },
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  container: {
+    flex: 1,
+    backgroundColor: "#f8fafc",
+  },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#64748b",
+    fontWeight: "800",
+  },
   header: {
     paddingHorizontal: 18,
-    paddingTop: Platform.OS === "android" ? 18 : 10,
-    paddingBottom: 14,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    height: 38,
-    paddingHorizontal: 13,
-    borderRadius: 14,
-    backgroundColor: "#eff6ff",
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  backButtonText: {
-    marginLeft: 5,
-    color: "#2563eb",
-    fontSize: 13,
-    fontWeight: "900",
+    paddingTop: Platform.OS === "android" ? 4 : 2,
+    paddingBottom: 10,
   },
   searchBox: {
     height: 56,
@@ -418,206 +423,214 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   searchInput: {
-    fontFamily: "Geologica",
     flex: 1,
     height: "100%",
     marginLeft: 10,
-    fontSize: 15,
-    fontWeight: "100",
     color: "#0f172a",
+    fontSize: 15,
+    fontWeight: "700",
   },
   clearBtn: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#f1f5f9",
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f1f5f9",
   },
-  listContent: { paddingHorizontal: 18, paddingBottom: 30 },
+  listContent: {
+    paddingHorizontal: 18,
+    paddingBottom: 24,
+  },
   titleBox: {
     backgroundColor: "#ffffff",
-    borderRadius: 24,
-    padding: 18,
-    marginTop: 8,
+    borderRadius: 22,
+    padding: 16,
     marginBottom: 14,
     borderWidth: 1,
     borderColor: "#e5e7eb",
   },
-  pageLabel: {
-    color: "#2563eb",
+  screenTitle: {
+    color: "#0f172a",
+    fontSize: 22,
+    lineHeight: 29,
+    fontWeight: "900",
+  },
+  accessBadge: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  accessBadgeOk: {
+    backgroundColor: "#16a34a",
+  },
+  accessBadgeLocked: {
+    backgroundColor: "#f97316",
+  },
+  accessBadgeText: {
+    color: "#ffffff",
     fontSize: 12,
     fontWeight: "900",
-    letterSpacing: 1.2,
   },
-  pageTitle: {
-    marginTop: 7,
-    fontSize: 24,
-    lineHeight: 31,
-    fontWeight: "900",
-    color: "#0f172a",
+  statsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 14,
   },
-  pageSubtitle: {
-    marginTop: 7,
-    color: "#64748b",
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: "600",
-  },
-  statsRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
   statCard: {
     flex: 1,
-    height: 48,
-    borderRadius: 16,
     backgroundColor: "#ffffff",
+    borderRadius: 18,
+    padding: 14,
+    alignItems: "center",
     borderWidth: 1,
     borderColor: "#e5e7eb",
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
   },
-  statText: {
-    marginLeft: 7,
-    color: "#475569",
-    fontSize: 13,
+  statValue: {
+    marginTop: 5,
+    color: "#0f172a",
+    fontSize: 22,
     fontWeight: "900",
   },
-  resultRow: {
-    marginBottom: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  resultTitle: {
-    fontSize: 18,
-    fontWeight: "100",
-    fontFamily: "Geologica",
-    color: "#0f172a",
-  },
-  resultCount: {
-    fontSize: 13,
-    fontWeight: "100",
-    fontFamily: "Geologica",
+  statLabel: {
+    marginTop: 2,
     color: "#64748b",
+    fontSize: 12,
+    fontWeight: "900",
   },
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: 24,
-    marginBottom: 16,
+    borderRadius: 22,
     padding: 14,
+    marginBottom: 14,
+    flexDirection: "row",
     borderWidth: 1,
     borderColor: "#e5e7eb",
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.09,
-    shadowRadius: 22,
-    elevation: 6,
-    flexDirection: "row",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    elevation: 3,
   },
   iconBox: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
+    width: 64,
+    height: 64,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+    marginRight: 13,
   },
-  folderIconBox: { backgroundColor: "#fef3c7" },
-  fileIconBox: { backgroundColor: "#dbeafe" },
-  cardBody: { flex: 1, marginLeft: 14 },
+  folderIconBox: {
+    backgroundColor: "#fef3c7",
+  },
+  fileIconBox: {
+    backgroundColor: "#eff6ff",
+  },
+  cardBody: {
+    flex: 1,
+  },
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
   typeBadge: {
-    height: 28,
     paddingHorizontal: 9,
+    paddingVertical: 5,
     borderRadius: 999,
     flexDirection: "row",
     alignItems: "center",
+    gap: 5,
   },
-  folderBadge: { backgroundColor: "#fffbeb" },
-  fileBadge: { backgroundColor: "#eff6ff" },
-  typeBadgeText: { marginLeft: 4, fontSize: 11, fontWeight: "900" },
-  folderBadgeText: { color: "#92400e" },
-  fileBadgeText: { color: "#1d4ed8" },
+  folderBadge: {
+    backgroundColor: "#fef3c7",
+  },
+  fileBadge: {
+    backgroundColor: "#dbeafe",
+  },
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  folderBadgeText: {
+    color: "#92400e",
+  },
+  fileBadgeText: {
+    color: "#1d4ed8",
+  },
   cardTitle: {
-    marginTop: 9,
+    marginTop: 10,
+    color: "#0f172a",
     fontSize: 17,
     lineHeight: 23,
     fontWeight: "900",
-    color: "#0f172a",
   },
   cardDescription: {
     marginTop: 5,
+    color: "#64748b",
     fontSize: 13,
     lineHeight: 19,
-    fontWeight: "600",
-    color: "#64748b",
+    fontWeight: "700",
   },
   footerRow: {
-    marginTop: 14,
+    marginTop: 13,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: 9,
   },
   infoChip: {
-    height: 36,
-    paddingHorizontal: 10,
-    borderRadius: 13,
+    flex: 1,
     backgroundColor: "#f1f5f9",
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
   },
   infoChipText: {
-    marginLeft: 5,
+    color: "#475569",
     fontSize: 11,
     fontWeight: "900",
-    color: "#475569",
   },
   exploreBtn: {
-    height: 38,
-    paddingLeft: 14,
-    paddingRight: 10,
-    borderRadius: 13,
     backgroundColor: "#2563eb",
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
+  },
+  lockedBtn: {
+    backgroundColor: "#f97316",
   },
   exploreText: {
     color: "#ffffff",
     fontSize: 12,
     fontWeight: "900",
-    marginRight: 4,
-  },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#64748b",
   },
   emptyBox: {
-    marginTop: 50,
-    padding: 28,
-    borderRadius: 24,
-    backgroundColor: "#ffffff",
+    marginTop: 55,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
+    justifyContent: "center",
+    paddingHorizontal: 30,
   },
   emptyTitle: {
-    fontFamily: "Geologica",
     marginTop: 12,
-    fontSize: 19,
+    fontSize: 20,
     fontWeight: "900",
     color: "#0f172a",
   },
   emptyText: {
-    marginTop: 8,
-    fontSize: 14,
-    fontWeight: "600",
+    marginTop: 5,
     color: "#64748b",
+    fontWeight: "700",
     textAlign: "center",
   },
 });

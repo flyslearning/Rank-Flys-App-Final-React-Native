@@ -18,11 +18,11 @@ export const TestAPI = {
   },
 
   // Start attempt
-  startAttempt(testId: string) {
-    return testClient.post("/attempts/start", {
-      test_id: testId,
-    });
-  },
+  startAttempt: (testId: string, seriesId: string) =>
+  testClient.post("/attempts/start", {
+    test_id: testId,
+    series_id: seriesId,
+  }),
 
   // Get questions of a test
   getQuestions(testId: string) {

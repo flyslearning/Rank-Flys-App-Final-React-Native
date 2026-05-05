@@ -38,7 +38,7 @@ type Stats = {
 };
 
 export default function TestAttemptScreen({ route, navigation }: Props) {
-  const { testId } = route.params;
+  const { testId, seriesId } = route.params;
   const { width } = useWindowDimensions();
   const isSmall = width < 370;
 
@@ -60,18 +60,36 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
   const [visitedMap, setVisitedMap] = useState<Record<string, boolean>>({});
   const [paletteVisible, setPaletteVisible] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [allowExit, setAllowExit] = useState(false);
 
   const questionStartTime = useRef(Date.now());
+  const hasStartedRef = useRef(false);
+
   const currentQuestion: Question | undefined = questions[currentQuestionIndex];
 
-  const startTest = async () => {
+  const startTest = useCallback(async () => {
+    if (hasStartedRef.current) return;
+
     try {
+      hasStartedRef.current = true;
       setLoading(true);
 
-      const attemptRes = await TestAPI.startAttempt(testId);
-      const newAttemptId = attemptRes.data?.data?.attempt_id;
+      await clearAttempt();
+      setCurrentQuestionIndex(0);
+      setMarkedMap({});
+      setVisitedMap({});
+      setElapsedSeconds(0);
 
-      if (!newAttemptId) throw new Error("Attempt ID not found");
+      const attemptRes = await TestAPI.startAttempt(testId, seriesId);
+      const newAttemptId =
+        attemptRes.data?.data?.attempt_id ||
+        attemptRes.data?.data?.id ||
+        attemptRes.data?.attempt_id ||
+        attemptRes.data?.id;
+
+      if (!newAttemptId) {
+        throw new Error("Attempt ID not found");
+      }
 
       const questionRes = await TestAPI.getQuestions(testId);
       const questionList = questionRes.data?.data || questionRes.data || [];
@@ -84,18 +102,31 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
 
       questionStartTime.current = Date.now();
     } catch (error: any) {
+      hasStartedRef.current = false;
+
+      console.log("START ERROR:", error?.response?.data || error.message);
+
       Alert.alert(
         "Error",
-        error?.response?.data?.message || error.message || "Test start failed"
+        error?.response?.data?.message ||
+          error?.response?.data?.error ||
+          error.message ||
+          "Test start failed"
       );
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    testId,
+    seriesId,
+    clearAttempt,
+    setCurrentQuestionIndex,
+    startLocalAttempt,
+  ]);
 
   useEffect(() => {
     startTest();
-  }, [testId]);
+  }, [startTest]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -128,7 +159,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
     return `${m}m ${s}s`;
   };
 
-  const saveCurrentTime = async () => {
+  const saveCurrentTime = useCallback(async () => {
     if (!currentQuestion) return;
 
     const oldResponse = responsesMap[currentQuestion.id];
@@ -143,7 +174,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
     }
 
     questionStartTime.current = Date.now();
-  };
+  }, [currentQuestion, responsesMap, selectOption]);
 
   const chooseOption = async (optionIndex: number) => {
     if (!currentQuestion) return;
@@ -228,7 +259,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
     return "notVisited";
   };
 
-  const submit = async () => {
+  const submit = useCallback(async () => {
     if (!attemptId) {
       Alert.alert("Error", "Attempt ID missing");
       return;
@@ -249,18 +280,25 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
               await saveCurrentTime();
 
               const responses = getResponsesArray();
-
               await TestAPI.submitAttempt(attemptId, responses);
 
               const id = attemptId;
 
+              setAllowExit(true);
               await clearAttempt();
 
               navigation.replace("Result", {
                 attemptId: id,
               });
             } catch (error: any) {
-              Alert.alert("Error", error?.response?.data?.message || "Submit failed");
+              console.log("SUBMIT ERROR:", error?.response?.data || error.message);
+
+              Alert.alert(
+                "Error",
+                error?.response?.data?.message ||
+                  error?.response?.data?.error ||
+                  "Submit failed"
+              );
             } finally {
               setSubmitting(false);
             }
@@ -268,9 +306,18 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
         },
       ]
     );
-  };
+  }, [
+    attemptId,
+    stats,
+    saveCurrentTime,
+    getResponsesArray,
+    clearAttempt,
+    navigation,
+  ]);
 
   const confirmBackAction = useCallback(() => {
+    if (allowExit || submitting) return false;
+
     Alert.alert(
       "Leave Test?",
       "Aapka test abhi submit nahi hua hai. Kya aap test submit karna chahte ho?",
@@ -281,7 +328,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
     );
 
     return true;
-  }, [submit]);
+  }, [allowExit, submitting, submit]);
 
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
@@ -294,7 +341,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("beforeRemove", (e) => {
-      if (loading || submitting) return;
+      if (allowExit || loading || submitting) return;
 
       e.preventDefault();
 
@@ -309,7 +356,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
     });
 
     return unsubscribe;
-  }, [navigation, loading, submitting, submit]);
+  }, [navigation, allowExit, loading, submitting, submit]);
 
   if (loading) {
     return <LoadingState />;
@@ -857,7 +904,7 @@ const styles = StyleSheet.create({
 
   content: {
     padding: 14,
-    paddingBottom: 130,
+    paddingBottom: 190,
   },
   questionCard: {
     backgroundColor: "#ffffff",
@@ -995,7 +1042,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 18,
+    bottom: 50,
     paddingHorizontal: 12,
   },
   bottomNav: {
