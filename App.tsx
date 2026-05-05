@@ -8,6 +8,8 @@ import SplashScreen from "./src/screens/extrascreens/SplashScreen";
 import { useAuthStore } from "./src/store/auth.store";
 import { useAppStore } from "./src/store/app.store";
 
+import { initDatabase } from "./src/db/database";
+
 export default function App() {
   const [showCustomSplash, setShowCustomSplash] = useState(true);
 
@@ -24,19 +26,22 @@ export default function App() {
   });
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let isMounted = true;
 
     async function initApp() {
       try {
-        await Promise.all([
-          loadTokens(),
-          loadApp(),
-        ]);
+        // Ye database.ts me ebook + test sab tables create kar raha hai
+        initDatabase();
+
+        await Promise.all([loadTokens(), loadApp()]);
       } catch (error) {
         console.log("App Init Error:", error);
       } finally {
         timer = setTimeout(() => {
-          setShowCustomSplash(false);
+          if (isMounted) {
+            setShowCustomSplash(false);
+          }
         }, 1500);
       }
     }
@@ -44,7 +49,11 @@ export default function App() {
     initApp();
 
     return () => {
-      if (timer) clearTimeout(timer);
+      isMounted = false;
+
+      if (timer) {
+        clearTimeout(timer);
+      }
     };
   }, [loadTokens, loadApp]);
 

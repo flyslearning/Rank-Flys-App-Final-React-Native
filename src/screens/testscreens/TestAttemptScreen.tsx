@@ -19,6 +19,10 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, Question } from "../../types";
 import { TestAPI } from "../../api/test.api";
 import { useTestStore } from "../../store/test.store";
+import {
+  getQuestionsLocal,
+  saveQuestions,
+} from "../../db/testDb";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TestAttempt">;
 

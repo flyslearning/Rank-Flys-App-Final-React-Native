@@ -15,8 +15,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useFocusEffect } from "@react-navigation/native";
+
 import { RootStackParamList, EbookNode } from "../../types";
 import { EbookAPI } from "../../api/ebook.api";
+import { EbookDb } from "../../db/ebookDb";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EbookNodes">;
 
@@ -30,6 +33,8 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+
+  const safeParentId = parentId || null;
 
   const getNodeTitle = (node: EbookNode) => {
     return node.name || node.title || "Untitled";
@@ -68,35 +73,84 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
     return `${PDF_BASE_URL}${encodeURIComponent(cleanUrl)}`;
   };
 
-  const loadNodes = useCallback(async () => {
-    try {
-      setLoading(true);
+  const loadNodes = useCallback(
+    async (showLoader = false) => {
+      try {
+        if (showLoader) setLoading(true);
 
-      const res = await EbookAPI.getNodes(seriesId, parentId || null);
+        const cachedNodes = EbookDb.getNodes(seriesId, safeParentId);
 
-      const data: EbookNode[] = Array.isArray(res.data)
-        ? res.data
-        : res.data?.data || [];
+        if (cachedNodes.length > 0) {
+        const cachedAccess = EbookDb.getSeriesAccess(seriesId);
 
-      const access = res.data?.has_access === true;
+        setHasAccess(cachedAccess.hasAccess || cachedAccess.isFree);
+        setNodes(sortNodesOrderWise(cachedNodes as any));
+        setLoading(false);
+      }
 
-      setHasAccess(access);
-      setNodes(sortNodesOrderWise(data));
-    } catch (error: any) {
-      console.log("Ebook nodes error:", error?.response?.data || error.message);
-      Alert.alert("Error", "Ebook content load failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [seriesId, parentId]);
+        const res = await EbookAPI.getNodes(seriesId, safeParentId);
+
+        const apiNodes: EbookNode[] = Array.isArray(res.data)
+          ? res.data
+          : res.data?.data || [];
+
+        const access =
+          res.data?.has_access === true ||
+          res.data?.is_free === true ||
+          res.data?.has_access === 1 ||
+          res.data?.is_free === 1;
+
+        const normalizedNodes: EbookNode[] = apiNodes.map((item: any) => ({
+          ...item,
+          id: item.id,
+          series_id: item.series_id || seriesId,
+          name: item.name || item.title || "Untitled",
+          title: item.title || item.name || "Untitled",
+          type: item.type || "file",
+          parent_id: item.parent_id ?? safeParentId,
+          file_url: item.file_url || null,
+          order: Number(item.order ?? item.sort_order ?? 0),
+          sort_order: Number(item.sort_order ?? item.order ?? 0),
+          created_at: item.created_at || "",
+          has_children: item.has_children === true || item.type === "folder",
+        }));
+
+        EbookDb.saveNodes(seriesId, safeParentId, normalizedNodes as any);
+
+        const latestLocalNodes = EbookDb.getNodes(seriesId, safeParentId);
+
+        setHasAccess(access);
+        setNodes(sortNodesOrderWise(latestLocalNodes as any));
+      } catch (error: any) {
+        console.log("Ebook nodes error:", error?.response?.data || error.message);
+
+        const cachedNodes = EbookDb.getNodes(seriesId, safeParentId);
+
+        if (cachedNodes.length > 0) {
+          setNodes(sortNodesOrderWise(cachedNodes as any));
+        } else {
+          Alert.alert("Error", "Ebook content load failed");
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [seriesId, safeParentId]
+  );
 
   useEffect(() => {
-    loadNodes();
+    loadNodes(true);
   }, [loadNodes]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadNodes(false);
+    }, [loadNodes])
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadNodes();
+    await loadNodes(false);
     setRefreshing(false);
   };
 
@@ -210,7 +264,13 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
               ]}
             >
               <Ionicons
-                name={!hasAccess ? "lock-closed-outline" : isFolder ? "albums-outline" : "reader-outline"}
+                name={
+                  !hasAccess
+                    ? "lock-closed-outline"
+                    : isFolder
+                    ? "albums-outline"
+                    : "reader-outline"
+                }
                 size={13}
                 color={!hasAccess ? "#c2410c" : isFolder ? "#92400e" : "#1d4ed8"}
               />
@@ -226,7 +286,13 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
             </View>
 
             <Ionicons
-              name={!hasAccess ? "lock-closed-outline" : isFolder ? "chevron-forward" : "open-outline"}
+              name={
+                !hasAccess
+                  ? "lock-closed-outline"
+                  : isFolder
+                  ? "chevron-forward"
+                  : "open-outline"
+              }
               size={21}
               color="#94a3b8"
             />
@@ -249,7 +315,13 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
           <View style={styles.footerRow}>
             <View style={styles.infoChip}>
               <Ionicons
-                name={!hasAccess ? "lock-closed-outline" : isFolder ? "layers-outline" : "book-outline"}
+                name={
+                  !hasAccess
+                    ? "lock-closed-outline"
+                    : isFolder
+                    ? "layers-outline"
+                    : "book-outline"
+                }
                 size={16}
                 color="#475569"
               />
@@ -269,7 +341,13 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
               </Text>
 
               <Ionicons
-                name={!hasAccess ? "lock-closed-outline" : isFolder ? "chevron-forward" : "open-outline"}
+                name={
+                  !hasAccess
+                    ? "lock-closed-outline"
+                    : isFolder
+                    ? "chevron-forward"
+                    : "open-outline"
+                }
                 size={17}
                 color="#ffffff"
               />
@@ -343,7 +421,11 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
                   ]}
                 >
                   <Ionicons
-                    name={hasAccess ? "checkmark-circle-outline" : "lock-closed-outline"}
+                    name={
+                      hasAccess
+                        ? "checkmark-circle-outline"
+                        : "lock-closed-outline"
+                    }
                     size={14}
                     color="#ffffff"
                   />
@@ -361,7 +443,11 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
                 </View>
 
                 <View style={styles.statCard}>
-                  <Ionicons name="document-text-outline" size={21} color="#2563eb" />
+                  <Ionicons
+                    name="document-text-outline"
+                    size={21}
+                    color="#2563eb"
+                  />
                   <Text style={styles.statValue}>{fileCount}</Text>
                   <Text style={styles.statLabel}>Files</Text>
                 </View>
@@ -384,24 +470,10 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 12,
-    color: "#64748b",
-    fontWeight: "800",
-  },
+  safeArea: { flex: 1, backgroundColor: "#f8fafc" },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { marginTop: 12, color: "#64748b", fontWeight: "800" },
   header: {
     paddingHorizontal: 18,
     paddingTop: Platform.OS === "android" ? 4 : 2,
@@ -438,10 +510,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#f1f5f9",
   },
-  listContent: {
-    paddingHorizontal: 18,
-    paddingBottom: 24,
-  },
+  listContent: { paddingHorizontal: 18, paddingBottom: 24 },
   titleBox: {
     backgroundColor: "#ffffff",
     borderRadius: 22,
@@ -466,22 +535,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
   },
-  accessBadgeOk: {
-    backgroundColor: "#16a34a",
-  },
-  accessBadgeLocked: {
-    backgroundColor: "#f97316",
-  },
-  accessBadgeText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 14,
-  },
+  accessBadgeOk: { backgroundColor: "#16a34a" },
+  accessBadgeLocked: { backgroundColor: "#f97316" },
+  accessBadgeText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
+  statsRow: { flexDirection: "row", gap: 12, marginBottom: 14 },
   statCard: {
     flex: 1,
     backgroundColor: "#ffffff",
@@ -525,15 +582,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 13,
   },
-  folderIconBox: {
-    backgroundColor: "#fef3c7",
-  },
-  fileIconBox: {
-    backgroundColor: "#eff6ff",
-  },
-  cardBody: {
-    flex: 1,
-  },
+  folderIconBox: { backgroundColor: "#fef3c7" },
+  fileIconBox: { backgroundColor: "#eff6ff" },
+  cardBody: { flex: 1 },
   topRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -547,22 +598,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
   },
-  folderBadge: {
-    backgroundColor: "#fef3c7",
-  },
-  fileBadge: {
-    backgroundColor: "#dbeafe",
-  },
-  typeBadgeText: {
-    fontSize: 11,
-    fontWeight: "900",
-  },
-  folderBadgeText: {
-    color: "#92400e",
-  },
-  fileBadgeText: {
-    color: "#1d4ed8",
-  },
+  folderBadge: { backgroundColor: "#fef3c7" },
+  fileBadge: { backgroundColor: "#dbeafe" },
+  typeBadgeText: { fontSize: 11, fontWeight: "900" },
+  folderBadgeText: { color: "#92400e" },
+  fileBadgeText: { color: "#1d4ed8" },
   cardTitle: {
     marginTop: 10,
     color: "#0f172a",
@@ -593,11 +633,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  infoChipText: {
-    color: "#475569",
-    fontSize: 11,
-    fontWeight: "900",
-  },
+  infoChipText: { color: "#475569", fontSize: 11, fontWeight: "900" },
   exploreBtn: {
     backgroundColor: "#2563eb",
     borderRadius: 14,
@@ -607,14 +643,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
   },
-  lockedBtn: {
-    backgroundColor: "#f97316",
-  },
-  exploreText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "900",
-  },
+  lockedBtn: { backgroundColor: "#f97316" },
+  exploreText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
   emptyBox: {
     marginTop: 55,
     alignItems: "center",

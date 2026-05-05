@@ -2,7 +2,7 @@
   "expo": {
     "name": "Rank Flys",
     "slug": "rank-flys-app",
-    "version": "1.0.0",
+    "version": "6.0.0",
     "orientation": "portrait",
     "icon": "./src/assets/images/icon.png",
     "userInterfaceStyle": "light",
@@ -13,6 +13,14 @@
     },
     "android": {
       "package": "com.RankFly.testseries",
+      "versionCode": 10,
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./src/assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -29,6 +37,10 @@
       "eas": {
         "projectId": "ec47a234-d2c3-4cc5-bd12-885a2612fb4f"
       }
-    }
+    },
+    "plugins": [
+      "expo-font",
+      "expo-sqlite"
+    ]
   }
 }

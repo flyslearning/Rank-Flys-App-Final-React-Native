@@ -17,6 +17,13 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, TestItem } from "../../types";
 import { TestAPI } from "../../api/test.api";
 
+import {
+  getTestsLocal,
+  saveTests,
+  updateTestSeriesAccess,
+  updateTestSeriesCount,
+} from "../../db/testDb";
+
 type Props = NativeStackScreenProps<RootStackParamList, "Tests">;
 
 export default function TestsScreen({ route, navigation }: Props) {
@@ -27,17 +34,42 @@ export default function TestsScreen({ route, navigation }: Props) {
   const [search, setSearch] = useState("");
 
   const loadTests = useCallback(async () => {
-    try {
-      setLoading(true);
-      const res = await TestAPI.getTestsBySeries(seriesId);
-      setTests(res.data?.data || []);
-    } catch (error: any) {
-      console.log("Tests error:", error.response?.data || error.message);
-      Alert.alert("Error", "Tests load failed");
-    } finally {
+  try {
+    const localTests = getTestsLocal(seriesId) as any[];
+
+    if (localTests.length > 0) {
+      setTests(localTests);
       setLoading(false);
+    } else {
+      setLoading(true);
     }
-  }, [seriesId]);
+
+    const res = await TestAPI.getTestsBySeries(seriesId);
+
+    const freshTests = res.data?.data || [];
+    const hasAccess = res.data?.has_access === true;
+    const isFree = res.data?.is_free === true;
+
+    saveTests(seriesId, freshTests);
+    updateTestSeriesAccess(seriesId, hasAccess, isFree);
+    updateTestSeriesCount(seriesId, freshTests.length);
+
+    const updatedLocalTests = getTestsLocal(seriesId) as any[];
+    setTests(updatedLocalTests);
+  } catch (error: any) {
+    console.log("Tests error:", error.response?.data || error.message);
+
+    const localTests = getTestsLocal(seriesId) as any[];
+
+    if (localTests.length > 0) {
+      setTests(localTests);
+    } else {
+      Alert.alert("Error", "Tests load failed");
+    }
+  } finally {
+    setLoading(false);
+  }
+}, [seriesId]);
 
   useEffect(() => {
     loadTests();

@@ -21,11 +21,12 @@ import TestsScreen from "../screens/testscreens/TestsScreen";
 import TestAttemptScreen from "../screens/testscreens/TestAttemptScreen";
 import ResultScreen from "../screens/testscreens/ResultScreen";
 import AttemptsScreen from "../screens/testscreens/PreviousAttemptsScreen";
+import ReelScreen from "../screens/reelscreens/ReelScreen";
 
 import EbookSeriesScreen from "../screens/ebookscreens/EbookSeriesScreen";
 import EbookNodesScreen from "../screens/ebookscreens/EbookNodesScreen";
 import PdfViewerScreen from "../screens/ebookscreens/PdfViewerScreen";
-
+import DoubtScreen from "../screens/DoubtScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -51,37 +52,44 @@ function BottomTabs() {
         tabBarIcon: ({ color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = "home-outline";
 
-          if (route.name === "HomeTab") iconName = "home-outline";
-          if (route.name === "TestsTab") iconName = "clipboard-outline";
-          if (route.name === "EbooksTab") iconName = "book-outline";
-          if (route.name === "ProfileTab") iconName = "person-outline";
+          if (route.name === "Home") iconName = "home-outline";
+          if (route.name === "Tests") iconName = "clipboard-outline";
+          if (route.name === "Flys") iconName = "play-circle-outline";
+          if (route.name === "Ebooks") iconName = "book-outline";
+          if (route.name === "Doubt") iconName = "help-circle-outline";
+          
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
       })}
     >
       <Tab.Screen
-        name="HomeTab"
+        name="Home"
         component={HomeScreen}
         options={{ headerShown: false }}
       />
 
       <Tab.Screen
-        name="TestsTab"
+        name="Tests"
         component={TestSeriesScreen}
         options={{ title: "Test Series", tabBarLabel: "Tests" }}
       />
+      <Tab.Screen
+        name="Flys"
+        component={ReelScreen}
+        options={{ headerShown: false }}
+      />
 
       <Tab.Screen
-        name="EbooksTab"
+        name="Ebooks"
         component={EbookSeriesScreen}
         options={{ title: "Ebook Library", tabBarLabel: "Ebooks" }}
       />
 
       <Tab.Screen
-        name="ProfileTab"
-        component={ProfileScreen}
-        options={{ title: "Profile", tabBarLabel: "Profile" }}
+        name="Doubt"
+        component={DoubtScreen}
+        options={{ headerShown: false }}
       />
     </Tab.Navigator>
   );

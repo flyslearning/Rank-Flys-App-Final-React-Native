@@ -19,6 +19,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, EbookSeriesItem } from "../../types";
 import { EbookAPI } from "../../api/ebook.api";
 import { startPayment } from "../../utils/payment";
+import { EbookDb } from "../../db/ebookDb";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EbookSeries">;
 
@@ -76,50 +77,81 @@ export default function EbookSeriesScreen({ navigation }: Props) {
     }
   };
 
-  const loadSeries = useCallback(async () => {
-    try {
-      setLoading(true);
+  const loadSeries = useCallback(async (showLoader = false) => {
+  try {
+    if (showLoader) setLoading(true);
 
-      const res = await EbookAPI.getSeries();
-      const seriesList = Array.isArray(res.data)
-        ? res.data
-        : res.data?.data || [];
+    const cached = EbookDb.getSeries();
 
-      const sortedSeries = [...seriesList].sort(
-        (a: any, b: any) =>
-          new Date(b.created_at || 0).getTime() -
-          new Date(a.created_at || 0).getTime()
-      );
-
-      const seriesWithCounts = await Promise.all(
-        sortedSeries.map(async (item: EbookSeriesWithCount) => {
-          const filesCount = await getEbookFilesCount(item.id);
-
-          return {
-            ...item,
-            filesCount,
-          };
-        })
-      );
-
-      setSeries(seriesWithCounts);
-    } catch (error: any) {
-      console.log("Ebook series error:", error?.response?.data || error.message);
-      Alert.alert("Error", "Ebook series load failed");
-    } finally {
+    if (cached.length > 0) {
+      setSeries(cached as any);
       setLoading(false);
     }
-  }, []);
+
+    const res = await EbookAPI.getSeries();
+
+    const seriesList = Array.isArray(res.data)
+      ? res.data
+      : res.data?.data || [];
+
+    const sortedSeries = [...seriesList].sort(
+      (a: any, b: any) =>
+        new Date(b.created_at || 0).getTime() -
+        new Date(a.created_at || 0).getTime()
+    );
+
+    const seriesWithCounts = await Promise.all(
+      sortedSeries.map(async (item: EbookSeriesWithCount) => {
+        const cachedNodes = EbookDb.getNodes(item.id, null);
+
+        let filesCount = cachedNodes.filter(
+          (node: any) => node.type === "file" || node.type === "pdf"
+        ).length;
+
+        try {
+          const nodeRes = await (EbookAPI as any).getNodes(item.id);
+          const nodes = nodeRes.data?.data || nodeRes.data || [];
+
+          EbookDb.saveNodes(item.id, null, nodes);
+
+          filesCount = nodes.filter((node: any) => {
+            return node.type === "file" || node.type === "pdf";
+          }).length;
+        } catch {}
+
+        return {
+          ...item,
+          filesCount,
+        };
+      })
+    );
+
+    EbookDb.saveSeries(seriesWithCounts);
+    setSeries(seriesWithCounts);
+  } catch (error: any) {
+    console.log("Ebook series error:", error?.response?.data || error.message);
+
+    const cached = EbookDb.getSeries();
+
+    if (cached.length > 0) {
+      setSeries(cached as any);
+    } else {
+      Alert.alert("Error", "Ebook series load failed");
+    }
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   useEffect(() => {
-    loadSeries();
-  }, [loadSeries]);
+  loadSeries(true);
+}, [loadSeries]);
 
   const onRefresh = async () => {
-    setRefreshing(true);
-    await loadSeries();
-    setRefreshing(false);
-  };
+  setRefreshing(true);
+  await loadSeries(false);
+  setRefreshing(false);
+};
 
   const filteredSeries = useMemo(() => {
     const keyword = search.trim().toLowerCase();

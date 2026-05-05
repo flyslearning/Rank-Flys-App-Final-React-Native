@@ -18,6 +18,11 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, TestSeries } from "../../types";
 import { TestAPI } from "../../api/test.api";
 import { startPayment } from "../../utils/payment";
+import {
+  getTestSeriesLocal,
+  saveTestSeries,
+  updateTestSeriesCount,
+} from "../../db/testDb";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TestSeries">;
 
@@ -50,35 +55,57 @@ export default function TestSeriesScreen({ navigation }: Props) {
   };
 
   const loadSeries = useCallback(async () => {
-    try {
-      setLoading(true);
+  try {
+    const localData = getTestSeriesLocal() as SeriesWithCount[];
 
-      const res = await TestAPI.getTestSeries();
-      const seriesList = res.data?.data || [];
-
-      const sortedSeries = [...seriesList].sort(
-        (a: any, b: any) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-      const seriesWithCounts = await Promise.all(
-        sortedSeries.map(async (item: SeriesWithCount) => {
-          const testsCount = await getSeriesTestsCount(item.id);
-          return {
-            ...item,
-            testsCount,
-          };
-        })
-      );
-
-      setSeries(seriesWithCounts);
-    } catch (error: any) {
-      console.log("Test series error:", error.response?.data || error.message);
-      Alert.alert("Error", "Test series load failed");
-    } finally {
+    if (localData.length > 0) {
+      setSeries(localData);
       setLoading(false);
+    } else {
+      setLoading(true);
     }
-  }, []);
+
+    const res = await TestAPI.getTestSeries();
+    const seriesList = res.data?.data || [];
+
+    const sortedSeries = [...seriesList].sort(
+      (a: any, b: any) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    const seriesWithCounts = await Promise.all(
+      sortedSeries.map(async (item: SeriesWithCount) => {
+        const testsCount = await getSeriesTestsCount(item.id);
+
+        return {
+          ...item,
+          testsCount,
+        };
+      })
+    );
+
+    saveTestSeries(seriesWithCounts);
+
+    for (const item of seriesWithCounts) {
+      updateTestSeriesCount(item.id, item.testsCount || 0);
+    }
+
+    const updatedLocalData = getTestSeriesLocal() as SeriesWithCount[];
+    setSeries(updatedLocalData);
+  } catch (error: any) {
+    console.log("Test series error:", error.response?.data || error.message);
+
+    const localData = getTestSeriesLocal() as SeriesWithCount[];
+
+    if (localData.length > 0) {
+      setSeries(localData);
+    } else {
+      Alert.alert("Error", "Test series load failed");
+    }
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   useEffect(() => {
     loadSeries();
