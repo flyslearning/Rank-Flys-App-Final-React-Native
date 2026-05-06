@@ -74,5 +74,50 @@ CREATE TABLE IF NOT EXISTS test_questions (
 
     CREATE INDEX IF NOT EXISTS idx_ebook_nodes_series_parent
     ON ebook_nodes(series_id, parent_id);
+
+     CREATE TABLE IF NOT EXISTS sync_meta (
+      module TEXT NOT NULL,
+      goal_class_id TEXT NOT NULL DEFAULT '',
+      version INTEGER DEFAULT 0,
+      last_sync_time INTEGER DEFAULT 0,
+      PRIMARY KEY (module, goal_class_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS tool_subjects (
+      id TEXT PRIMARY KEY NOT NULL,
+      goal_class_id TEXT,
+      name TEXT,
+      description TEXT,
+      sort_order INTEGER,
+      is_active INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS tool_chapters (
+      id TEXT PRIMARY KEY NOT NULL,
+      subject_id TEXT,
+      name TEXT,
+      sort_order INTEGER,
+      is_active INTEGER DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS tool_topics (
+      id TEXT PRIMARY KEY NOT NULL,
+      chapter_id TEXT,
+      name TEXT,
+      sort_order INTEGER,
+      status TEXT DEFAULT 'not_started',
+      confidence INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
+      is_active INTEGER DEFAULT 1
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tool_subjects_goal
+    ON tool_subjects(goal_class_id);
+
+    CREATE INDEX IF NOT EXISTS idx_tool_chapters_subject
+    ON tool_chapters(subject_id);
+
+    CREATE INDEX IF NOT EXISTS idx_tool_topics_chapter
+    ON tool_topics(chapter_id);
   `);
 }

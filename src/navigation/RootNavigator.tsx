@@ -13,6 +13,10 @@ import IntroSliderScreen from "../screens/extrascreens/IntroSliderScreen";
 import SendOtpScreen from "../screens/authscreens/SendOtpScreen";
 import VerifyOtpScreen from "../screens/authscreens/VerifyOtpScreen";
 import OnboardingScreen from "../screens/authscreens/OnboardingScreen";
+import SyllabusTracker from "../screens/toolscreens/SyllabusTracker";
+import StudyPlanner from "../screens/toolscreens/StudyPlanner";
+import StudyTechnique from "../screens/toolscreens/StudyTechnique";
+import FlashCard from "../screens/toolscreens/FlashCard";
 
 import HomeScreen from "../screens/HomeScreen";
 
@@ -53,9 +57,9 @@ function BottomTabs() {
           let iconName: keyof typeof Ionicons.glyphMap = "home-outline";
 
           if (route.name === "Home") iconName = "home-outline";
-          if (route.name === "Tests") iconName = "clipboard-outline";
+          if (route.name === "Test") iconName = "clipboard-outline";
           if (route.name === "Flys") iconName = "play-circle-outline";
-          if (route.name === "Ebooks") iconName = "book-outline";
+          if (route.name === "Ebook") iconName = "book-outline";
           if (route.name === "Doubt") iconName = "help-circle-outline";
           
 
@@ -70,7 +74,7 @@ function BottomTabs() {
       />
 
       <Tab.Screen
-        name="Tests"
+        name="Test"
         component={TestSeriesScreen}
         options={{ title: "Test Series", tabBarLabel: "Tests" }}
       />
@@ -81,7 +85,7 @@ function BottomTabs() {
       />
 
       <Tab.Screen
-        name="Ebooks"
+        name="Ebook"
         component={EbookSeriesScreen}
         options={{ title: "Ebook Library", tabBarLabel: "Ebooks" }}
       />
@@ -160,7 +164,32 @@ export default function RootNavigator() {
             />
 
             <Stack.Screen name="PdfViewer" component={PdfViewerScreen} />
-          </>
+         
+            <Stack.Screen
+            name="SyllabusTracker"
+            component={SyllabusTracker}
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="StudyPlanner"
+            component={StudyPlanner}
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="StudyTechnique"
+            component={StudyTechnique}
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="FlashCard"
+            component={FlashCard}
+            options={{ headerShown: false }}
+          />
+           </>
+          
         )}
       </Stack.Navigator>
     </NavigationContainer>
