@@ -343,7 +343,7 @@ export default function AttemptsScreen({ route, navigation }: Props) {
             </View>
 
             <View style={styles.overviewCard}>
-              <Text style={styles.overviewValue}>{stats.bestAccuracy}%</Text>
+              <Text style={styles.overviewValue}>{stats.bestAccuracy.toFixed(1)}%</Text>
               <Text style={styles.overviewLabel}>Best Acc.</Text>
             </View>
           </View>

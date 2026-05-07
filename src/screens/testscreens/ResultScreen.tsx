@@ -286,9 +286,7 @@ export default function ResultScreen({ route }: Props) {
                   Your Answer: {optionName(item.selected_option)}
                 </Text>
                 <Text style={styles.quickChip}>Marks: {item.marks}</Text>
-                <Text style={styles.quickChip}>
-                  Time: {item.time_spent_seconds}s
-                </Text>
+              
               </View>
 
               {!q && (
@@ -368,10 +366,6 @@ export default function ResultScreen({ route }: Props) {
 
                     <Text style={styles.answerLine}>
                       Correct Option: {optionName(q.correct_option)}
-                    </Text>
-
-                    <Text style={styles.answerLine}>
-                      Time Spent: {item.time_spent_seconds} seconds
                     </Text>
                   </View>
 

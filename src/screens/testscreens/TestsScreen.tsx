@@ -34,42 +34,42 @@ export default function TestsScreen({ route, navigation }: Props) {
   const [search, setSearch] = useState("");
 
   const loadTests = useCallback(async () => {
-  try {
-    const localTests = getTestsLocal(seriesId) as any[];
+    try {
+      const localTests = getTestsLocal(seriesId) as any[];
 
-    if (localTests.length > 0) {
-      setTests(localTests);
+      if (localTests.length > 0) {
+        setTests(localTests);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
+      const res = await TestAPI.getTestsBySeries(seriesId);
+
+      const freshTests = res.data?.data || [];
+      const hasAccess = res.data?.has_access === true;
+      const isFree = res.data?.is_free === true;
+
+      saveTests(seriesId, freshTests);
+      updateTestSeriesAccess(seriesId, hasAccess, isFree);
+      updateTestSeriesCount(seriesId, freshTests.length);
+
+      const updatedLocalTests = getTestsLocal(seriesId) as any[];
+      setTests(updatedLocalTests);
+    } catch (error: any) {
+      console.log("Tests error:", error.response?.data || error.message);
+
+      const localTests = getTestsLocal(seriesId) as any[];
+
+      if (localTests.length > 0) {
+        setTests(localTests);
+      } else {
+        Alert.alert("Error", "Tests load failed");
+      }
+    } finally {
       setLoading(false);
-    } else {
-      setLoading(true);
     }
-
-    const res = await TestAPI.getTestsBySeries(seriesId);
-
-    const freshTests = res.data?.data || [];
-    const hasAccess = res.data?.has_access === true;
-    const isFree = res.data?.is_free === true;
-
-    saveTests(seriesId, freshTests);
-    updateTestSeriesAccess(seriesId, hasAccess, isFree);
-    updateTestSeriesCount(seriesId, freshTests.length);
-
-    const updatedLocalTests = getTestsLocal(seriesId) as any[];
-    setTests(updatedLocalTests);
-  } catch (error: any) {
-    console.log("Tests error:", error.response?.data || error.message);
-
-    const localTests = getTestsLocal(seriesId) as any[];
-
-    if (localTests.length > 0) {
-      setTests(localTests);
-    } else {
-      Alert.alert("Error", "Tests load failed");
-    }
-  } finally {
-    setLoading(false);
-  }
-}, [seriesId]);
+  }, [seriesId]);
 
   useEffect(() => {
     loadTests();
@@ -88,6 +88,8 @@ export default function TestsScreen({ route, navigation }: Props) {
 
   const renderTestCard = ({ item, index }: { item: TestItem; index: number }) => (
     <View style={styles.card}>
+      <View style={styles.cardGlow} />
+
       <View style={styles.cardTop}>
         <View style={styles.numberBox}>
           <Text style={styles.numberText}>{String(index + 1).padStart(2, "0")}</Text>
@@ -109,7 +111,9 @@ export default function TestsScreen({ route, navigation }: Props) {
 
       <View style={styles.statsRow}>
         <View style={styles.statBox}>
-          <Ionicons name="time-outline" size={18} color="#2563eb" />
+          <View style={styles.statIconBox}>
+            <Ionicons name="time-outline" size={18} color="#2563eb" />
+          </View>
           <View>
             <Text style={styles.statValue}>{item.duration_minutes} min</Text>
             <Text style={styles.statLabel}>Duration</Text>
@@ -117,7 +121,9 @@ export default function TestsScreen({ route, navigation }: Props) {
         </View>
 
         <View style={styles.statBox}>
-          <Ionicons name="help-circle-outline" size={18} color="#2563eb" />
+          <View style={styles.statIconBox}>
+            <Ionicons name="help-circle-outline" size={18} color="#2563eb" />
+          </View>
           <View>
             <Text style={styles.statValue}>{item.total_questions}</Text>
             <Text style={styles.statLabel}>Questions</Text>
@@ -131,6 +137,7 @@ export default function TestsScreen({ route, navigation }: Props) {
           style={styles.secondaryBtn}
           onPress={() => navigation.navigate("Attempts", { testId: item.id })}
         >
+          <Ionicons name="document-text-outline" size={16} color="#334155" />
           <Text style={styles.secondaryText}>Attempts</Text>
         </TouchableOpacity>
 
@@ -141,11 +148,15 @@ export default function TestsScreen({ route, navigation }: Props) {
             navigation.navigate("TestAttempt", {
               testId: item.id,
               seriesId: seriesId,
-            })
+              duration_minutes: item.duration_minutes,
+              total_questions: item.total_questions,
+              title: item.title,
+              description: item.description,
+            } as any)
           }
         >
           <Text style={styles.primaryText}>Start Test</Text>
-          <Ionicons name="chevron-forward" size={18} color="#ffffff" />
+          <Ionicons name="arrow-forward-circle" size={20} color="#ffffff" />
         </TouchableOpacity>
       </View>
     </View>
@@ -169,6 +180,7 @@ export default function TestsScreen({ route, navigation }: Props) {
 
       <View style={styles.container}>
         <View style={styles.header}>
+
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={22} color="#64748b" />
 
@@ -219,24 +231,38 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: 18,
-    paddingTop: Platform.OS === "android" ? 18 : 10,
-    paddingBottom: 14,
+    paddingTop: Platform.OS === "android" ? 20 : 10,
+    paddingBottom: 16,
+  },
+
+  pageTitle: {
+    fontSize: 30,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+
+  pageSubtitle: {
+    marginTop: 5,
+    marginBottom: 16,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#64748b",
   },
 
   searchBox: {
-    height: 56,
-    borderRadius: 18,
+    height: 58,
+    borderRadius: 20,
     backgroundColor: "#ffffff",
     borderWidth: 1,
-    borderColor: "#e2e8f0",
-    paddingHorizontal: 14,
+    borderColor: "#dbeafe",
+    paddingHorizontal: 15,
     flexDirection: "row",
     alignItems: "center",
-    shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.09,
+    shadowRadius: 18,
+    elevation: 5,
   },
 
   searchInput: {
@@ -245,14 +271,14 @@ const styles = StyleSheet.create({
     fontFamily: "Geologica",
     marginLeft: 10,
     fontSize: 15,
-    fontWeight: "100",
+    fontWeight: "600",
     color: "#0f172a",
   },
 
   clearBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 31,
+    height: 31,
+    borderRadius: 16,
     backgroundColor: "#f1f5f9",
     justifyContent: "center",
     alignItems: "center",
@@ -260,7 +286,7 @@ const styles = StyleSheet.create({
 
   listContent: {
     paddingHorizontal: 18,
-    paddingBottom: 30,
+    paddingBottom: 34,
   },
 
   resultRow: {
@@ -273,7 +299,7 @@ const styles = StyleSheet.create({
 
   resultTitle: {
     fontSize: 18,
-    fontWeight: "100",
+    fontWeight: "900",
     fontFamily: "Geologica",
     color: "#0f172a",
   },
@@ -281,22 +307,33 @@ const styles = StyleSheet.create({
   resultCount: {
     fontFamily: "Geologica",
     fontSize: 13,
-    fontWeight: "100",
+    fontWeight: "800",
     color: "#64748b",
   },
 
   card: {
     backgroundColor: "#ffffff",
-    borderRadius: 24,
+    borderRadius: 26,
     padding: 18,
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
+    borderColor: "#dbeafe",
     shadowColor: "#0f172a",
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.1,
-    shadowRadius: 22,
-    elevation: 7,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.11,
+    shadowRadius: 24,
+    elevation: 8,
+    overflow: "hidden",
+  },
+
+  cardGlow: {
+    position: "absolute",
+    top: -45,
+    right: -45,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: "#eff6ff",
   },
 
   cardTop: {
@@ -307,12 +344,17 @@ const styles = StyleSheet.create({
   },
 
   numberBox: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
+    width: 54,
+    height: 54,
+    borderRadius: 19,
     backgroundColor: "#2563eb",
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 6,
   },
 
   numberText: {
@@ -340,8 +382,8 @@ const styles = StyleSheet.create({
   },
 
   cardTitle: {
-    fontSize: 21,
-    lineHeight: 28,
+    fontSize: 22,
+    lineHeight: 29,
     fontWeight: "900",
     color: "#0f172a",
   },
@@ -355,26 +397,35 @@ const styles = StyleSheet.create({
   },
 
   statsRow: {
-    marginTop: 16,
+    marginTop: 17,
     flexDirection: "row",
     gap: 10,
   },
 
   statBox: {
     flex: 1,
-    minHeight: 58,
-    borderRadius: 16,
+    minHeight: 64,
+    borderRadius: 18,
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#eef2f7",
     paddingHorizontal: 12,
     flexDirection: "row",
     alignItems: "center",
-    gap: 9,
+    gap: 10,
+  },
+
+  statIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 13,
+    backgroundColor: "#eff6ff",
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   statValue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
     color: "#0f172a",
   },
@@ -394,13 +445,15 @@ const styles = StyleSheet.create({
 
   secondaryBtn: {
     flex: 1,
-    height: 44,
-    borderRadius: 14,
+    height: 46,
+    borderRadius: 15,
     backgroundColor: "#f1f5f9",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     justifyContent: "center",
     alignItems: "center",
+    flexDirection: "row",
+    gap: 6,
   },
 
   secondaryText: {
@@ -411,19 +464,24 @@ const styles = StyleSheet.create({
 
   primaryBtn: {
     flex: 1.35,
-    height: 44,
-    borderRadius: 14,
+    height: 46,
+    borderRadius: 15,
     backgroundColor: "#2563eb",
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.23,
+    shadowRadius: 14,
+    elevation: 5,
   },
 
   primaryText: {
     color: "#ffffff",
     fontSize: 13,
     fontWeight: "900",
-    marginRight: 4,
+    marginRight: 6,
   },
 
   center: {

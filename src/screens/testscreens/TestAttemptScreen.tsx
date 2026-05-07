@@ -7,7 +7,6 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
-  FlatList,
   Modal,
   StatusBar,
   SafeAreaView,
@@ -19,10 +18,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, Question } from "../../types";
 import { TestAPI } from "../../api/test.api";
 import { useTestStore } from "../../store/test.store";
-import {
-  getQuestionsLocal,
-  saveQuestions,
-} from "../../db/testDb";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TestAttempt">;
 
@@ -42,8 +38,10 @@ type Stats = {
 };
 
 export default function TestAttemptScreen({ route, navigation }: Props) {
-  const { testId, seriesId } = route.params;
+  const { testId, seriesId } = route.params as any;
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  
   const isSmall = width < 370;
 
   const {
@@ -63,13 +61,163 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
   const [markedMap, setMarkedMap] = useState<Record<string, boolean>>({});
   const [visitedMap, setVisitedMap] = useState<Record<string, boolean>>({});
   const [paletteVisible, setPaletteVisible] = useState(false);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [allowExit, setAllowExit] = useState(false);
 
   const questionStartTime = useRef(Date.now());
   const hasStartedRef = useRef(false);
+  const autoSubmittedRef = useRef(false);
 
   const currentQuestion: Question | undefined = questions[currentQuestionIndex];
+
+  const getTestDurationMinutes = (attemptRes: any, questionRes: any, questionList: any[]) => {
+    const duration =
+      route.params?.duration_minutes ||
+      route.params?.durationMinutes ||
+      route.params?.duration ||
+      attemptRes?.data?.data?.duration_minutes ||
+      attemptRes?.data?.duration_minutes ||
+      questionRes?.data?.duration_minutes ||
+      questionRes?.data?.data?.duration_minutes ||
+      questionRes?.data?.test?.duration_minutes ||
+      questionRes?.data?.data?.test?.duration_minutes ||
+      questionList?.[0]?.duration_minutes ||
+      questionList?.[0]?.test_duration_minutes ||
+      questionList?.[0]?.test?.duration_minutes;
+
+    const minutes = Number(duration);
+    return Number.isFinite(minutes) && minutes > 0 ? minutes : 60;
+  };
+
+  const formatTime = (seconds: number) => {
+    const safe = Math.max(0, seconds);
+    const h = Math.floor(safe / 3600);
+    const m = Math.floor((safe % 3600) / 60);
+    const s = safe % 60;
+
+    const mm = String(m).padStart(2, "0");
+    const ss = String(s).padStart(2, "0");
+
+    if (h > 0) return `${String(h).padStart(2, "0")}:${mm}:${ss}`;
+    return `${mm}:${ss}`;
+  };
+
+  const getOptions = (q?: any): string[] => {
+    if (!q) return [];
+    return q.options || [q.option_a, q.option_b, q.option_c, q.option_d].filter(Boolean);
+  };
+
+  const saveCurrentTime = useCallback(async () => {
+    if (!currentQuestion) return;
+
+    const oldResponse = responsesMap[currentQuestion.id];
+    const seconds = Math.floor((Date.now() - questionStartTime.current) / 1000);
+
+    if (oldResponse) {
+      await selectOption(
+        currentQuestion.id,
+        oldResponse.selected_option,
+        (oldResponse.time_spent_seconds || 0) + seconds
+      );
+    }
+
+    questionStartTime.current = Date.now();
+  }, [currentQuestion, responsesMap, selectOption]);
+
+  const stats = useMemo(() => {
+    let answered = 0;
+    let marked = 0;
+    let notAnswered = 0;
+    let notVisited = 0;
+
+    questions.forEach((q) => {
+      const selected = responsesMap[q.id]?.selected_option;
+      const isAnswered = selected !== null && selected !== undefined;
+      const isVisited = !!visitedMap[q.id];
+      const isMarked = !!markedMap[q.id];
+
+      if (isAnswered) answered++;
+      if (isMarked) marked++;
+      if (isVisited && !isAnswered) notAnswered++;
+      if (!isVisited) notVisited++;
+    });
+
+    return {
+      answered,
+      marked,
+      notAnswered,
+      notVisited,
+      total: questions.length,
+    };
+  }, [questions, responsesMap, markedMap, visitedMap]);
+
+  const finalSubmit = useCallback(
+    async (auto = false) => {
+      if (!attemptId || submitting) return;
+
+      try {
+        setSubmitting(true);
+        setPaletteVisible(false);
+
+        await saveCurrentTime();
+
+        const responses = getResponsesArray();
+        await TestAPI.submitAttempt(attemptId, responses);
+
+        const id = attemptId;
+
+        setAllowExit(true);
+        await clearAttempt();
+
+        if (auto) {
+          Alert.alert("Time Over", "Test automatically submit ho gaya.");
+        }
+
+        navigation.replace("Result", {
+          attemptId: id,
+        });
+      } catch (error: any) {
+        console.log("SUBMIT ERROR:", error?.response?.data || error.message);
+
+        Alert.alert(
+          "Error",
+          error?.response?.data?.message ||
+            error?.response?.data?.error ||
+            "Submit failed"
+        );
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      attemptId,
+      submitting,
+      saveCurrentTime,
+      getResponsesArray,
+      clearAttempt,
+      navigation,
+    ]
+  );
+
+  const submit = useCallback(() => {
+    if (!attemptId) {
+      Alert.alert("Error", "Attempt ID missing");
+      return;
+    }
+
+    Alert.alert(
+      "Submit Test?",
+      `Answered: ${stats.answered}/${stats.total}\nMarked: ${stats.marked}\nNot Answered: ${stats.notAnswered}\n\nSubmit karna hai?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Submit",
+          style: "destructive",
+          onPress: () => finalSubmit(false),
+        },
+      ]
+    );
+  }, [attemptId, stats, finalSubmit]);
 
   const startTest = useCallback(async () => {
     if (hasStartedRef.current) return;
@@ -82,9 +230,12 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
       setCurrentQuestionIndex(0);
       setMarkedMap({});
       setVisitedMap({});
-      setElapsedSeconds(0);
+      setRemainingSeconds(0);
+      setAllowExit(false);
+      autoSubmittedRef.current = false;
 
       const attemptRes = await TestAPI.startAttempt(testId, seriesId);
+
       const newAttemptId =
         attemptRes.data?.data?.attempt_id ||
         attemptRes.data?.data?.id ||
@@ -96,7 +247,16 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
       }
 
       const questionRes = await TestAPI.getQuestions(testId);
-      const questionList = questionRes.data?.data || questionRes.data || [];
+      const rawData = questionRes.data?.data || questionRes.data || [];
+      const questionList = Array.isArray(rawData) ? rawData : rawData?.questions || [];
+
+      const durationMinutes = getTestDurationMinutes(
+        attemptRes,
+        questionRes,
+        questionList
+      );
+
+      setRemainingSeconds(durationMinutes * 60);
 
       await startLocalAttempt(newAttemptId, testId, questionList);
 
@@ -123,6 +283,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
   }, [
     testId,
     seriesId,
+    route.params,
     clearAttempt,
     setCurrentQuestionIndex,
     startLocalAttempt,
@@ -133,12 +294,27 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
   }, [startTest]);
 
   useEffect(() => {
+    if (loading || submitting || allowExit || remainingSeconds <= 0) return;
+
     const timer = setInterval(() => {
-      setElapsedSeconds((prev) => prev + 1);
+      setRemainingSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+
+          if (!autoSubmittedRef.current) {
+            autoSubmittedRef.current = true;
+            finalSubmit(true);
+          }
+
+          return 0;
+        }
+
+        return prev - 1;
+      });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [loading, submitting, allowExit, remainingSeconds, finalSubmit]);
 
   useEffect(() => {
     if (currentQuestion?.id) {
@@ -148,37 +324,6 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
       }));
     }
   }, [currentQuestionIndex, currentQuestion?.id]);
-
-  const getOptions = (q?: any): string[] => {
-    if (!q) return [];
-    return q.options || [q.option_a, q.option_b, q.option_c, q.option_d].filter(Boolean);
-  };
-
-  const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-
-    if (h > 0) return `${h}h ${m}m ${s}s`;
-    return `${m}m ${s}s`;
-  };
-
-  const saveCurrentTime = useCallback(async () => {
-    if (!currentQuestion) return;
-
-    const oldResponse = responsesMap[currentQuestion.id];
-    const seconds = Math.floor((Date.now() - questionStartTime.current) / 1000);
-
-    if (oldResponse) {
-      await selectOption(
-        currentQuestion.id,
-        oldResponse.selected_option,
-        (oldResponse.time_spent_seconds || 0) + seconds
-      );
-    }
-
-    questionStartTime.current = Date.now();
-  }, [currentQuestion, responsesMap, selectOption]);
 
   const chooseOption = async (optionIndex: number) => {
     if (!currentQuestion) return;
@@ -223,33 +368,6 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
     }));
   };
 
-  const stats = useMemo(() => {
-    let answered = 0;
-    let marked = 0;
-    let notAnswered = 0;
-    let notVisited = 0;
-
-    questions.forEach((q) => {
-      const selected = responsesMap[q.id]?.selected_option;
-      const isAnswered = selected !== null && selected !== undefined;
-      const isVisited = !!visitedMap[q.id];
-      const isMarked = !!markedMap[q.id];
-
-      if (isAnswered) answered++;
-      if (isMarked) marked++;
-      if (isVisited && !isAnswered) notAnswered++;
-      if (!isVisited) notVisited++;
-    });
-
-    return {
-      answered,
-      marked,
-      notAnswered,
-      notVisited,
-      total: questions.length,
-    };
-  }, [questions, responsesMap, markedMap, visitedMap]);
-
   const getQuestionStatus = (q: Question): QuestionStatus => {
     const selected = responsesMap[q.id]?.selected_option;
     const isAnswered = selected !== null && selected !== undefined;
@@ -262,62 +380,6 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
     if (isVisited) return "notAnswered";
     return "notVisited";
   };
-
-  const submit = useCallback(async () => {
-    if (!attemptId) {
-      Alert.alert("Error", "Attempt ID missing");
-      return;
-    }
-
-    Alert.alert(
-      "Submit Test?",
-      `Answered: ${stats.answered}/${stats.total}\nMarked: ${stats.marked}\nNot Answered: ${stats.notAnswered}\n\nSubmit karna hai?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Submit",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setSubmitting(true);
-
-              await saveCurrentTime();
-
-              const responses = getResponsesArray();
-              await TestAPI.submitAttempt(attemptId, responses);
-
-              const id = attemptId;
-
-              setAllowExit(true);
-              await clearAttempt();
-
-              navigation.replace("Result", {
-                attemptId: id,
-              });
-            } catch (error: any) {
-              console.log("SUBMIT ERROR:", error?.response?.data || error.message);
-
-              Alert.alert(
-                "Error",
-                error?.response?.data?.message ||
-                  error?.response?.data?.error ||
-                  "Submit failed"
-              );
-            } finally {
-              setSubmitting(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [
-    attemptId,
-    stats,
-    saveCurrentTime,
-    getResponsesArray,
-    clearAttempt,
-    navigation,
-  ]);
 
   const confirmBackAction = useCallback(() => {
     if (allowExit || submitting) return false;
@@ -385,7 +447,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
       <TestHeader
         currentQuestionIndex={currentQuestionIndex}
         totalQuestions={questions.length}
-        elapsedSeconds={elapsedSeconds}
+        remainingSeconds={remainingSeconds}
         formatTime={formatTime}
       />
 
@@ -417,6 +479,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
       <BottomNavigation
         currentQuestionIndex={currentQuestionIndex}
         totalQuestions={questions.length}
+        bottomInset={insets.bottom}
         submitting={submitting}
         onPrevious={previousQuestion}
         onNext={nextQuestion}
@@ -435,6 +498,9 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
           submit();
         }}
         stats={stats}
+        remainingSeconds={remainingSeconds}
+        formatTime={formatTime}
+        submitting={submitting}
       />
     </SafeAreaView>
   );
@@ -454,14 +520,16 @@ function LoadingState() {
 function TestHeader({
   currentQuestionIndex,
   totalQuestions,
-  elapsedSeconds,
+  remainingSeconds,
   formatTime,
 }: {
   currentQuestionIndex: number;
   totalQuestions: number;
-  elapsedSeconds: number;
+  remainingSeconds: number;
   formatTime: (seconds: number) => string;
 }) {
+  const danger = remainingSeconds <= 300;
+
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
@@ -472,9 +540,15 @@ function TestHeader({
         </Text>
       </View>
 
-      <View style={styles.timeCard}>
-        <Ionicons name="time-outline" size={17} color="#2563eb" />
-        <Text style={styles.timeValue}>{formatTime(elapsedSeconds)}</Text>
+      <View style={[styles.timeCard, danger && styles.timeCardDanger]}>
+        <Ionicons
+          name="time-outline"
+          size={17}
+          color={danger ? "#dc2626" : "#2563eb"}
+        />
+        <Text style={[styles.timeValue, danger && styles.timeValueDanger]}>
+          {formatTime(remainingSeconds)}
+        </Text>
       </View>
     </View>
   );
@@ -510,11 +584,13 @@ function QuestionCard({
   currentQuestion: Question;
   isMarked: boolean;
 }) {
+  const q: any = currentQuestion;
+
   return (
     <View style={styles.questionCard}>
       <View style={styles.questionTop}>
         <Text style={styles.questionTag}>
-          {currentQuestion.subject || currentQuestion.section || "General"}
+          {q.subject || q.section || q.subject_name || q.section_name || "General"}
         </Text>
 
         {isMarked ? (
@@ -525,7 +601,7 @@ function QuestionCard({
       </View>
 
       <Text style={styles.questionText}>
-        {currentQuestion.question_text || currentQuestion.question}
+        {q.question_text || q.question}
       </Text>
     </View>
   );
@@ -612,6 +688,7 @@ function BottomNavigation({
   currentQuestionIndex,
   totalQuestions,
   submitting,
+  bottomInset,
   onPrevious,
   onNext,
   onSubmit,
@@ -619,6 +696,7 @@ function BottomNavigation({
   currentQuestionIndex: number;
   totalQuestions: number;
   submitting: boolean;
+  bottomInset: number;
   onPrevious: () => void;
   onNext: () => void;
   onSubmit: () => void;
@@ -626,7 +704,10 @@ function BottomNavigation({
   const isLast = currentQuestionIndex === totalQuestions - 1;
 
   return (
-    <View style={styles.bottomNavWrapper}>
+    <View
+  style={[
+    styles.bottomNavWrapper,
+    { bottom: Math.max(bottomInset, 6), },]}>
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={[styles.previousBtn, currentQuestionIndex === 0 && styles.disabledBtn]}
@@ -685,6 +766,9 @@ function QuestionPaletteModal({
   onJump,
   onSubmit,
   stats,
+  remainingSeconds,
+  formatTime,
+  submitting,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -694,17 +778,118 @@ function QuestionPaletteModal({
   onJump: (index: number) => void;
   onSubmit: () => void;
   stats: Stats;
+  remainingSeconds: number;
+  formatTime: (seconds: number) => string;
+  submitting: boolean;
 }) {
+  const { width } = useWindowDimensions();
+
+  const [activeDifficulty, setActiveDifficulty] = useState("All");
+  const [activeSubject, setActiveSubject] = useState("All");
+
+  const getDifficultyName = (q: any) => {
+    const value = q.difficulty || q.difficulty_level || q.level || "General";
+    return String(value).charAt(0).toUpperCase() + String(value).slice(1);
+  };
+
+  const getSubjectName = (q: any) => {
+    return q.subject || q.section || q.subject_name || q.section_name || "General";
+  };
+
+  const allItems = useMemo(() => {
+    return questions.map((question, index) => ({
+      question,
+      index,
+      difficulty: getDifficultyName(question as any),
+      subject: getSubjectName(question as any),
+    }));
+  }, [questions]);
+
+  const difficultyTabs = useMemo(() => {
+    const unique = Array.from(new Set(allItems.map((item) => item.difficulty)));
+    return ["All", ...unique];
+  }, [allItems]);
+
+  const subjectTabs = useMemo(() => {
+    const difficultyFiltered =
+      activeDifficulty === "All"
+        ? allItems
+        : allItems.filter((item) => item.difficulty === activeDifficulty);
+
+    const unique = Array.from(new Set(difficultyFiltered.map((item) => item.subject)));
+    return ["All", ...unique];
+  }, [allItems, activeDifficulty]);
+
+  const filteredItems = useMemo(() => {
+    return allItems.filter((item) => {
+      const difficultyOk =
+        activeDifficulty === "All" || item.difficulty === activeDifficulty;
+      const subjectOk = activeSubject === "All" || item.subject === activeSubject;
+      return difficultyOk && subjectOk;
+    });
+  }, [allItems, activeDifficulty, activeSubject]);
+
+  const groupedItems = useMemo(() => {
+    const groups: Record<string, typeof allItems> = {};
+
+    filteredItems.forEach((item) => {
+      const title =
+        activeDifficulty === "All" && activeSubject === "All"
+          ? `${item.difficulty} • ${item.subject}`
+          : activeSubject === "All"
+          ? item.subject
+          : activeDifficulty === "All"
+          ? item.difficulty
+          : item.subject;
+
+      if (!groups[title]) groups[title] = [];
+      groups[title].push(item);
+    });
+
+    return Object.entries(groups);
+  }, [filteredItems, activeDifficulty, activeSubject]);
+
+  useEffect(() => {
+    if (!subjectTabs.includes(activeSubject)) {
+      setActiveSubject("All");
+    }
+  }, [subjectTabs, activeSubject]);
+
+  const danger = remainingSeconds <= 300;
+
+  const sheetPadding = 16;
+  const subjectPadding = 12;
+  const gap = 8;
+  const columns = width < 360 ? 4 : 5;
+  const boxSize = Math.floor(
+    (width - sheetPadding * 2 - subjectPadding * 2 - gap * (columns - 1)) / columns
+  );
+
+  const getTabCount = (type: "difficulty" | "subject", tab: string) => {
+    if (type === "difficulty") {
+      if (tab === "All") return questions.length;
+      return allItems.filter((item) => item.difficulty === tab).length;
+    }
+
+    const difficultyFiltered =
+      activeDifficulty === "All"
+        ? allItems
+        : allItems.filter((item) => item.difficulty === activeDifficulty);
+
+    if (tab === "All") return difficultyFiltered.length;
+    return difficultyFiltered.filter((item) => item.subject === tab).length;
+  };
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
-        <View style={styles.paletteSheet}>
+        <SafeAreaView style={styles.paletteSheet}>
           <View style={styles.sheetHandle} />
 
           <View style={styles.paletteHeader}>
-            <View>
+            <View style={styles.paletteHeaderTextBox}>
               <Text style={styles.paletteTitle}>Question Panel</Text>
-              <Text style={styles.paletteSub}>Jump to any question quickly</Text>
+              <Text style={styles.paletteSub}>Difficulty aur Subject wise questions</Text>
             </View>
 
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
@@ -712,10 +897,105 @@ function QuestionPaletteModal({
             </TouchableOpacity>
           </View>
 
+          <View style={styles.paletteTopAction}>
+            <View style={[styles.paletteTimerBox, danger && styles.paletteTimerDanger]}>
+              <Ionicons
+                name="time-outline"
+                size={18}
+                color={danger ? "#dc2626" : "#2563eb"}
+              />
+              <Text style={[styles.paletteTimerText, danger && styles.timeValueDanger]}>
+                {formatTime(remainingSeconds)}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.paletteSubmitTopBtn}
+              onPress={onSubmit}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Text style={styles.paletteSubmitTopText}>Submit Test</Text>
+                  <Ionicons name="checkmark-circle-outline" size={18} color="#ffffff" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.paletteSummary}>
             <StatusChip label="Done" value={stats.answered} color="#16a34a" />
             <StatusChip label="Review" value={stats.marked} color="#7c3aed" />
             <StatusChip label="Left" value={stats.notVisited} color="#64748b" />
+          </View>
+
+          <View style={styles.sliderBlock}>
+            <Text style={styles.sliderLabel}>Difficulty</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterTabsContent}
+            >
+              {difficultyTabs.map((tab) => {
+                const active = activeDifficulty === tab;
+
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    activeOpacity={0.85}
+                    style={[styles.filterChip, active && styles.filterChipActive]}
+                    onPress={() => {
+                      setActiveDifficulty(tab);
+                      setActiveSubject("All");
+                    }}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.filterChipText, active && styles.filterChipTextActive]}
+                    >
+                      {tab}
+                    </Text>
+                    <Text style={[styles.filterChipCount, active && styles.filterChipCountActive]}>
+                      {getTabCount("difficulty", tab)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+
+          <View style={styles.sliderBlock}>
+            <Text style={styles.sliderLabel}>Subject</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterTabsContent}
+            >
+              {subjectTabs.map((tab) => {
+                const active = activeSubject === tab;
+
+                return (
+                  <TouchableOpacity
+                    key={tab}
+                    activeOpacity={0.85}
+                    style={[styles.filterChip, active && styles.filterChipActive]}
+                    onPress={() => setActiveSubject(tab)}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.filterChipText, active && styles.filterChipTextActive]}
+                    >
+                      {tab}
+                    </Text>
+                    <Text style={[styles.filterChipCount, active && styles.filterChipCountActive]}>
+                      {getTabCount("subject", tab)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
 
           <View style={styles.legendBox}>
@@ -726,48 +1006,67 @@ function QuestionPaletteModal({
             <Legend color="#e5e7eb" label="Not Visited" />
           </View>
 
-          <FlatList
-            data={questions}
-            keyExtractor={(item) => item.id}
-            numColumns={5}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.gridList}
-            renderItem={({ item, index }) => {
-              const status = getStatus(item);
-              const active = index === currentIndex;
+          <View style={styles.fixedGridArea}>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.subjectScrollContent}
+            >
+              {groupedItems.length === 0 ? (
+                <View style={styles.emptyPanel}>
+                  <Text style={styles.emptyPanelText}>No questions found</Text>
+                </View>
+              ) : (
+                groupedItems.map(([subject, items]) => (
+                  <View key={subject} style={styles.subjectBlock}>
+                    <View style={styles.subjectHeader}>
+                      <Text style={styles.subjectTitle} numberOfLines={1}>
+                        {subject}
+                      </Text>
+                      <Text style={styles.subjectCount}>{items.length} Questions</Text>
+                    </View>
 
-              return (
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  style={[
-                    styles.questionBox,
-                    status === "answered" && styles.boxAnswered,
-                    status === "notAnswered" && styles.boxNotAnswered,
-                    status === "marked" && styles.boxMarked,
-                    status === "answeredMarked" && styles.boxAnsweredMarked,
-                    status === "notVisited" && styles.boxNotVisited,
-                    active && styles.boxActive,
-                  ]}
-                  onPress={() => onJump(index)}
-                >
-                  <Text
-                    style={[
-                      styles.questionBoxText,
-                      status !== "notVisited" && styles.questionBoxTextLight,
-                    ]}
-                  >
-                    {index + 1}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }}
-          />
+                    <View style={[styles.subjectQuestionGrid, { gap }]}>
+                      {items.map(({ question, index }) => {
+                        const status = getStatus(question);
+                        const active = index === currentIndex;
 
-          <TouchableOpacity style={styles.finalSubmitBtn} onPress={onSubmit}>
-            <Text style={styles.finalSubmitText}>Submit Test</Text>
-            <Ionicons name="checkmark-circle-outline" size={19} color="#ffffff" />
-          </TouchableOpacity>
-        </View>
+                        return (
+                          <TouchableOpacity
+                            key={(question as any).id || index}
+                            activeOpacity={0.85}
+                            style={[
+                              styles.questionBox,
+                              {
+                                width: boxSize,
+                                height: boxSize,
+                              },
+                              status === "answered" && styles.boxAnswered,
+                              status === "notAnswered" && styles.boxNotAnswered,
+                              status === "marked" && styles.boxMarked,
+                              status === "answeredMarked" && styles.boxAnsweredMarked,
+                              status === "notVisited" && styles.boxNotVisited,
+                              active && styles.boxActive,
+                            ]}
+                            onPress={() => onJump(index)}
+                          >
+                            <Text
+                              style={[
+                                styles.questionBoxText,
+                                status !== "notVisited" && styles.questionBoxTextLight,
+                              ]}
+                            >
+                              {index + 1}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          </View>
+        </SafeAreaView>
       </View>
     </Modal>
   );
@@ -804,7 +1103,6 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontWeight: "700",
   },
-
   header: {
     backgroundColor: "#ffffff",
     paddingHorizontal: 18,
@@ -849,12 +1147,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#dbeafe",
   },
+  timeCardDanger: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#fecaca",
+  },
   timeValue: {
     color: "#1d4ed8",
     fontSize: 14,
     fontWeight: "900",
   },
-
+  timeValueDanger: {
+    color: "#dc2626",
+  },
   statusBar: {
     marginHorizontal: 14,
     marginTop: 12,
@@ -905,10 +1209,9 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12,
   },
-
   content: {
     padding: 14,
-    paddingBottom: 190,
+    paddingBottom: 230,
   },
   questionCard: {
     backgroundColor: "#ffffff",
@@ -950,7 +1253,6 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     fontWeight: "900",
   },
-
   optionsList: {
     gap: 11,
   },
@@ -996,7 +1298,6 @@ const styles = StyleSheet.create({
   optionTextActive: {
     color: "#1d4ed8",
   },
-
   midActions: {
     flexDirection: "row",
     gap: 10,
@@ -1041,12 +1342,11 @@ const styles = StyleSheet.create({
   reviewBtnTextActive: {
     color: "#ffffff",
   },
-
   bottomNavWrapper: {
     position: "absolute",
     left: 0,
     right: 0,
-    bottom: 50,
+    paddingBottom: 8,
     paddingHorizontal: 12,
   },
   bottomNav: {
@@ -1110,7 +1410,6 @@ const styles = StyleSheet.create({
   disabledBtn: {
     opacity: 0.45,
   },
-
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15,23,42,0.35)",
@@ -1121,7 +1420,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     padding: 16,
-    maxHeight: "88%",
+    paddingBottom: 22,
+    height: "92%",
   },
   sheetHandle: {
     width: 48,
@@ -1135,6 +1435,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
+  },
+  paletteHeaderTextBox: {
+    flex: 1,
   },
   paletteTitle: {
     fontSize: 23,
@@ -1154,10 +1458,104 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  paletteTopAction: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 16,
+  },
+  paletteTimerBox: {
+    flex: 1,
+    backgroundColor: "#eff6ff",
+    borderRadius: 16,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 7,
+  },
+  paletteTimerDanger: {
+    backgroundColor: "#fef2f2",
+    borderColor: "#fecaca",
+  },
+  paletteTimerText: {
+    color: "#1d4ed8",
+    fontWeight: "900",
+    fontSize: 15,
+  },
+  paletteSubmitTopBtn: {
+    flex: 1.25,
+    backgroundColor: "#dc2626",
+    borderRadius: 16,
+    paddingVertical: 13,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 7,
+  },
+  paletteSubmitTopText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "900",
+  },
   paletteSummary: {
     flexDirection: "row",
     gap: 8,
-    marginTop: 16,
+    marginTop: 14,
+  },
+  sliderBlock: {
+    marginTop: 12,
+  },
+  sliderLabel: {
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 8,
+  },
+  filterTabsContent: {
+    gap: 8,
+    paddingRight: 16,
+  },
+  filterChip: {
+    maxWidth: 170,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 999,
+    paddingVertical: 9,
+    paddingHorizontal: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+  },
+  filterChipActive: {
+    backgroundColor: "#2563eb",
+    borderColor: "#2563eb",
+  },
+  filterChipText: {
+    color: "#334155",
+    fontSize: 12,
+    fontWeight: "900",
+    maxWidth: 115,
+  },
+  filterChipTextActive: {
+    color: "#ffffff",
+  },
+  filterChipCount: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "900",
+    backgroundColor: "#e2e8f0",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  filterChipCountActive: {
+    color: "#2563eb",
+    backgroundColor: "#ffffff",
   },
   legendBox: {
     backgroundColor: "#f8fafc",
@@ -1185,14 +1583,47 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#475569",
   },
-  gridList: {
-    paddingTop: 14,
-    paddingBottom: 14,
+  fixedGridArea: {
+    flex: 1,
+    marginTop: 12,
+    backgroundColor: "#ffffff",
+    borderRadius: 18,
+    overflow: "hidden",
+  },
+  subjectScrollContent: {
+    paddingBottom: 16,
+  },
+  subjectBlock: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 18,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#eef2f7",
+  },
+  subjectHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 10,
+  },
+  subjectTitle: {
+    flex: 1,
+    color: "#0f172a",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  subjectCount: {
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  subjectQuestionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
   },
   questionBox: {
-    width: "18%",
-    aspectRatio: 1,
-    margin: "1%",
     borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
@@ -1223,18 +1654,13 @@ const styles = StyleSheet.create({
   questionBoxTextLight: {
     color: "#ffffff",
   },
-  finalSubmitBtn: {
-    backgroundColor: "#dc2626",
-    paddingVertical: 16,
-    borderRadius: 18,
+  emptyPanel: {
+    paddingVertical: 40,
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 7,
   },
-  finalSubmitText: {
-    color: "#ffffff",
-    fontSize: 16,
+  emptyPanelText: {
+    color: "#64748b",
     fontWeight: "900",
   },
 });

@@ -239,9 +239,6 @@ export default function HomeHeader({
                       <View style={styles.activeBadge} />
                     </View>
                   </View>
-
-                  <Text style={styles.brandTitle}>Rank Flys</Text>
-                  <Text style={styles.brandSubTitle}>Learn smarter every day</Text>
                 </View>
 
                 <View style={styles.menuList}>
