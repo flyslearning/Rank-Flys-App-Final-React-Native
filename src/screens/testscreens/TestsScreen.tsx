@@ -33,6 +33,9 @@ export default function TestsScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
+  const [hasAccess, setHasAccess] = useState(true);
+  const [isFree, setIsFree] = useState(true);
+
   const loadTests = useCallback(async () => {
     try {
       const localTests = getTestsLocal(seriesId) as any[];
@@ -47,11 +50,14 @@ export default function TestsScreen({ route, navigation }: Props) {
       const res = await TestAPI.getTestsBySeries(seriesId);
 
       const freshTests = res.data?.data || [];
-      const hasAccess = res.data?.has_access === true;
-      const isFree = res.data?.is_free === true;
+      const apiHasAccess = res.data?.has_access === true;
+      const apiIsFree = res.data?.is_free === true;
+
+      setHasAccess(apiHasAccess);
+      setIsFree(apiIsFree);
 
       saveTests(seriesId, freshTests);
-      updateTestSeriesAccess(seriesId, hasAccess, isFree);
+      updateTestSeriesAccess(seriesId, apiHasAccess, apiIsFree);
       updateTestSeriesCount(seriesId, freshTests.length);
 
       const updatedLocalTests = getTestsLocal(seriesId) as any[];
@@ -85,6 +91,8 @@ export default function TestsScreen({ route, navigation }: Props) {
       return title.includes(keyword) || description.includes(keyword);
     });
   }, [tests, search]);
+
+  const canStartTest = hasAccess || isFree;
 
   const renderTestCard = ({ item, index }: { item: TestItem; index: number }) => (
     <View style={styles.card}>
@@ -143,8 +151,13 @@ export default function TestsScreen({ route, navigation }: Props) {
 
         <TouchableOpacity
           activeOpacity={0.9}
-          style={styles.primaryBtn}
-          onPress={() =>
+          style={[styles.primaryBtn, !canStartTest && styles.primaryBtnLocked]}
+          onPress={() => {
+            if (!canStartTest) {
+              Alert.alert("Locked", "Please purchase this test series to start the test.");
+              return;
+            }
+
             navigation.navigate("TestAttempt", {
               testId: item.id,
               seriesId: seriesId,
@@ -152,11 +165,18 @@ export default function TestsScreen({ route, navigation }: Props) {
               total_questions: item.total_questions,
               title: item.title,
               description: item.description,
-            } as any)
-          }
+            } as any);
+          }}
         >
-          <Text style={styles.primaryText}>Start Test</Text>
-          <Ionicons name="arrow-forward-circle" size={20} color="#ffffff" />
+          <Text style={styles.primaryText}>
+            {canStartTest ? "Start Test" : "Locked"}
+          </Text>
+
+          <Ionicons
+            name={canStartTest ? "arrow-forward-circle" : "lock-closed"}
+            size={20}
+            color="#ffffff"
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -180,7 +200,6 @@ export default function TestsScreen({ route, navigation }: Props) {
 
       <View style={styles.container}>
         <View style={styles.header}>
-
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={22} color="#64748b" />
 
@@ -475,6 +494,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.23,
     shadowRadius: 14,
     elevation: 5,
+  },
+
+  primaryBtnLocked: {
+    backgroundColor: "#94a3b8",
+    shadowColor: "#64748b",
+    shadowOpacity: 0.18,
   },
 
   primaryText: {
