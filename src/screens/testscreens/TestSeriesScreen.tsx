@@ -5,7 +5,6 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   SafeAreaView,
   TextInput,
@@ -13,6 +12,7 @@ import {
   Platform,
   Image,
 } from "react-native";
+import CustomAlert from "../extrascreens/CustomAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, TestSeries } from "../../types";
@@ -39,6 +39,11 @@ export default function TestSeriesScreen({ navigation }: Props) {
   const [series, setSeries] = useState<SeriesWithCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertData, setAlertData] = useState({
+    title: "",
+    message: "",
+  });
 
   const getSeriesTestsCount = async (seriesId: string) => {
     try {
@@ -100,7 +105,12 @@ export default function TestSeriesScreen({ navigation }: Props) {
     if (localData.length > 0) {
       setSeries(localData);
     } else {
-      Alert.alert("Not Found", "Test series not found");
+setAlertData({
+  title: "Not Found 😢",
+  message: "Test series not found",
+});
+
+setAlertVisible(true);
     }
   } finally {
     setLoading(false);
@@ -284,6 +294,12 @@ export default function TestSeriesScreen({ navigation }: Props) {
 
       <View style={styles.container}>
         <View style={styles.header}>
+            <CustomAlert
+        visible={alertVisible}
+        title={alertData.title}
+        message={alertData.message}
+        onClose={() => setAlertVisible(false)}
+      />
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={22} color="#64748b" />
 

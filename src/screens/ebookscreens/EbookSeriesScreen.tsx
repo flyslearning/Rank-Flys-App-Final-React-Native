@@ -5,7 +5,6 @@ import {
   FlatList,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   SafeAreaView,
   TextInput,
@@ -15,6 +14,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import CustomAlert from "../extrascreens/CustomAlert";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, EbookSeriesItem } from "../../types";
 import { EbookAPI } from "../../api/ebook.api";
@@ -37,6 +37,11 @@ export default function EbookSeriesScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertData, setAlertData] = useState({
+    title: "",
+    message: "",
+  });
 
   const getImageUrl = (item: EbookSeriesWithCount) => {
     if (!item.image_url) return "";
@@ -136,7 +141,12 @@ export default function EbookSeriesScreen({ navigation }: Props) {
     if (cached.length > 0) {
       setSeries(cached as any);
     } else {
-      Alert.alert("Not Found", "Ebook series not found");
+     setAlertData({
+      title: "Not Found 😢",
+      message: "Ebook series not found",
+    });
+
+setAlertVisible(true);
     }
   } finally {
     setLoading(false);
@@ -340,6 +350,12 @@ export default function EbookSeriesScreen({ navigation }: Props) {
 
       <View style={styles.container}>
         <View style={styles.header}>
+          <CustomAlert
+            visible={alertVisible}
+            title={alertData.title}
+            message={alertData.message}
+            onClose={() => setAlertVisible(false)}
+          />
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={22} color="#64748b" />
 

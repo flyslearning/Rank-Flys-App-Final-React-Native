@@ -17,6 +17,7 @@ import {
   Animated,
   SafeAreaView,
 } from "react-native";
+import CustomAlert from "../extrascreens/CustomAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { useToolsStore } from "../../store/tools.store";
 import {
@@ -243,7 +244,7 @@ export default function StudyPlanner() {
       setSubjects(arr);
     } catch (err: any) {
       console.log("SUBJECT LOAD ERROR:", err?.response?.data || err);
-      Alert.alert("Error", "Subjects fetch nahi ho rahe. API/JWT check karo.");
+      Alert.alert("Error", "Subjects fetch nahi ho rahe.");
       setSubjects([]);
     } finally {
       setSyllabusLoading(false);
