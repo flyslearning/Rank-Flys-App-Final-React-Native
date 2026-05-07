@@ -1,3 +1,5 @@
+// src/components/home/Tools.tsx
+
 import React, { useEffect, useRef } from "react";
 import {
   View,
@@ -235,26 +237,31 @@ export default function Tools({ navigation }: Props) {
           <Text style={styles.subHeading}>Plan, track and revise smarter</Text>
         </View>
 
-        <Pressable style={styles.viewAllBtn}>
+        <Pressable
+          style={styles.viewAllBtn}
+          onPress={() => navigation?.navigate?.("Study Tools")}
+        >
           <Text style={styles.viewAllText}>View all</Text>
           <Ionicons name="arrow-forward" size={14} color="#2563EB" />
         </Pressable>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {tools.map((tool, index) => (
-          <ToolCard
-            key={tool.title}
-            tool={tool}
-            index={index}
-            navigation={navigation}
-          />
-        ))}
-      </ScrollView>
+      <View style={styles.scrollShell}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          {tools.map((tool, index) => (
+            <ToolCard
+              key={tool.title}
+              tool={tool}
+              index={index}
+              navigation={navigation}
+            />
+          ))}
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -312,13 +319,19 @@ const styles = StyleSheet.create({
     color: "#2563EB",
   },
 
+  scrollShell: {
+    borderRadius: 34,
+    overflow: "visible",
+  },
+
   scrollContent: {
     paddingRight: 20,
-    paddingBottom: 6,
+    paddingBottom: 8,
   },
 
   animatedCard: {
     marginRight: 16,
+    borderRadius: 34,
   },
 
   card: {
@@ -332,10 +345,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
 
     shadowColor: "#0F172A",
-    shadowOpacity: 0.1,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 15 },
-    elevation: 8,
+    shadowOpacity: 0.035,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
 
   softCircleLarge: {
@@ -380,7 +393,7 @@ const styles = StyleSheet.create({
   },
 
   badgeText: {
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: "900",
   },
 
@@ -414,10 +427,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
 
     shadowColor: "#0F172A",
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 5,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
 
   openButtonText: {

@@ -129,14 +129,14 @@ export default function EbookSeriesScreen({ navigation }: Props) {
     EbookDb.saveSeries(seriesWithCounts);
     setSeries(seriesWithCounts);
   } catch (error: any) {
-    console.log("Ebook series error:", error?.response?.data || error.message);
+    console.log("Ebook series not found:", error?.response?.data || error.message);
 
     const cached = EbookDb.getSeries();
 
     if (cached.length > 0) {
       setSeries(cached as any);
     } else {
-      Alert.alert("Error", "Ebook series load failed");
+      Alert.alert("Not Found", "Ebook series not found");
     }
   } finally {
     setLoading(false);

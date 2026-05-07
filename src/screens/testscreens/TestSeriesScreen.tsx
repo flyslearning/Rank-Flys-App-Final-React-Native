@@ -93,14 +93,14 @@ export default function TestSeriesScreen({ navigation }: Props) {
     const updatedLocalData = getTestSeriesLocal() as SeriesWithCount[];
     setSeries(updatedLocalData);
   } catch (error: any) {
-    console.log("Test series error:", error.response?.data || error.message);
+    console.log("Test series not found:", error.response?.data || error.message);
 
     const localData = getTestSeriesLocal() as SeriesWithCount[];
 
     if (localData.length > 0) {
       setSeries(localData);
     } else {
-      Alert.alert("Error", "Test series load failed");
+      Alert.alert("Not Found", "Test series not found");
     }
   } finally {
     setLoading(false);

@@ -10,7 +10,7 @@ type AppState = {
 
 export const useAppStore = create<AppState>((set) => ({
   isAppReady: false,
-  hasSeenIntro: false,
+  hasSeenIntro: true,
 
   loadApp: async () => {
     try {
@@ -36,7 +36,7 @@ export const useAppStore = create<AppState>((set) => ({
       console.log("App load error:", error);
 
       set({
-        hasSeenIntro: false,
+        hasSeenIntro: true,
         isAppReady: true,
       });
     }

@@ -1,3 +1,5 @@
+// src/screens/HomeScreen.tsx
+
 import React from "react";
 import {
   View,
@@ -14,7 +16,6 @@ import ContinueLearningCard from "../components/home/ContinueCard";
 import QuickActionCard from "../components/home/QuickActionCard";
 import SectionTitle from "../components/home/SectionTitle";
 import Tools from "../components/home/Tools";
-import FlashCard from "../components/home/FlashCard";
 
 export default function HomeScreen({ navigation }: any) {
   return (
@@ -32,69 +33,51 @@ export default function HomeScreen({ navigation }: any) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.heroCard}>
-          <View>
-            <Text style={styles.heroLabel}>Welcome back 👋</Text>
-            <Text style={styles.heroTitle}>Ready to learn today?</Text>
-            <Text style={styles.heroSubtitle}>
-              Continue your preparation with smart tools and tests.
-            </Text>
-          </View>
+        <ContinueLearningCard />
 
-          <View style={styles.heroIconBox}>
-            <Ionicons name="school-outline" size={30} color="#FFFFFF" />
+        <View style={styles.quickSection}>
+          <SectionTitle title="Quick Actions" subtitle="Start learning instantly" />
+
+          <View style={styles.grid}>
+            <QuickActionCard
+              title="E-Books"
+              subtitle="Read premium notes and PDFs"
+              icon="book-outline"
+              accentColor="#2563EB"
+              softColor="#EFF6FF"
+              onPress={() => navigation.navigate("EbookSeries")}
+            />
+
+            <QuickActionCard
+              title="Test Series"
+              subtitle="Attempt mock tests and quizzes"
+              icon="document-text-outline"
+              accentColor="#7C3AED"
+              softColor="#F5F3FF"
+              onPress={() => navigation.navigate("TestSeries")}
+            />
           </View>
         </View>
 
-        <ContinueLearningCard
-          title="Mathematics Ebook"
-          subtitle="Chapter 2 • Algebra Basics"
-          progress={45}
-          onPress={() => navigation.navigate("EbookSeries")}
-        />
-
-        <SectionTitle title="Quick Actions" subtitle="Start learning instantly" />
-
-        <View style={styles.grid}>
-          <QuickActionCard
-            title="E-Books"
-            subtitle="Read premium notes and PDFs"
-            icon="book-outline"
-            accentColor="#2563EB"
-            softColor="#EFF6FF"
-            onPress={() => navigation.navigate("EbookSeries")}
-          />
-
-          <QuickActionCard
-            title="Test Series"
-            subtitle="Attempt mock tests and quizzes"
-            icon="document-text-outline"
-            accentColor="#7C3AED"
-            softColor="#F5F3FF"
-            onPress={() => navigation.navigate("TestSeries")}
-          />
+        <View style={styles.toolsSoftWrap}>
+          <Tools navigation={navigation} />
         </View>
-
-        {/* Tools section: Study Planner, Syllabus Tracker, Study Technique, Flashcards */}
-        <Tools navigation={navigation} />
-
-        <FlashCard />
 
         <SectionTitle title="Featured" subtitle="Recommended for you" />
 
         <Pressable
           style={styles.featureCard}
-          onPress={() => navigation.navigate("TestSeries")}
+          onPress={() => navigation.navigate("Mentorship")}
         >
           <View style={styles.featureIconBox}>
-            <Ionicons name="analytics-outline" size={25} color="#2563EB" />
+            <Ionicons name="people-outline" size={25} color="#2563EB" />
           </View>
 
           <View style={styles.featureTextBox}>
-            <Text style={styles.featureTag}>New Practice</Text>
-            <Text style={styles.featureTitle}>Weekly Practice Test</Text>
+            <Text style={styles.featureTag}>Expert Guidance</Text>
+            <Text style={styles.featureTitle}>Mentorship Sessions</Text>
             <Text style={styles.featureSubtitle}>
-              Chapter-wise tests with instant performance tracking.
+              Get personal guidance from mentors for your study journey.
             </Text>
           </View>
 
@@ -103,19 +86,19 @@ export default function HomeScreen({ navigation }: any) {
 
         <Pressable
           style={styles.featureCard}
-          onPress={() => navigation.navigate("EbookSeries")}
+          onPress={() => navigation.navigate("Scholarship")}
         >
           <View style={[styles.featureIconBox, styles.purpleBox]}>
-            <Ionicons name="library-outline" size={25} color="#7C3AED" />
+            <Ionicons name="trophy-outline" size={25} color="#7C3AED" />
           </View>
 
           <View style={styles.featureTextBox}>
             <Text style={[styles.featureTag, styles.purpleText]}>
-              Popular Material
+              Rewards & Contest
             </Text>
-            <Text style={styles.featureTitle}>Complete Study Notes</Text>
+            <Text style={styles.featureTitle}>Scholarship Program</Text>
             <Text style={styles.featureSubtitle}>
-              Access topic-wise PDFs, notes and revision material.
+              Join contests and unlock scholarship opportunities.
             </Text>
           </View>
 
@@ -131,71 +114,46 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
+
   fixedHeader: {
     backgroundColor: "#F8FAFC",
     zIndex: 999,
-    elevation: 10,
+    elevation: 6,
     shadowColor: "#0F172A",
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.025,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
   },
+
   container: {
     flex: 1,
   },
+
   content: {
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 40,
   },
-  heroCard: {
-    backgroundColor: "#0F172A",
-    borderRadius: 30,
-    padding: 22,
-    marginBottom: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 9,
+
+  quickSection: {
+    marginTop: -10,
   },
-  heroLabel: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: "#93C5FD",
-    marginBottom: 7,
-  },
-  heroTitle: {
-    fontSize: 24,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    letterSpacing: -0.6,
-  },
-  heroSubtitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#CBD5E1",
-    marginTop: 8,
-    lineHeight: 19,
-    maxWidth: 235,
-  },
-  heroIconBox: {
-    width: 58,
-    height: 58,
-    borderRadius: 22,
-    backgroundColor: "#2563EB",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
     marginBottom: 4,
   },
+
+  toolsSoftWrap: {
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.025,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+
   featureCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 26,
@@ -206,11 +164,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5E7EB",
     shadowColor: "#0F172A",
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 3,
   },
+
   featureIconBox: {
     width: 54,
     height: 54,
@@ -220,26 +179,32 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 14,
   },
+
   purpleBox: {
     backgroundColor: "#F5F3FF",
   },
+
   featureTextBox: {
     flex: 1,
   },
+
   featureTag: {
     fontSize: 12,
     fontWeight: "900",
     color: "#2563EB",
     marginBottom: 5,
   },
+
   purpleText: {
     color: "#7C3AED",
   },
+
   featureTitle: {
     fontSize: 16,
     fontWeight: "900",
     color: "#0F172A",
   },
+
   featureSubtitle: {
     fontSize: 13,
     fontWeight: "600",

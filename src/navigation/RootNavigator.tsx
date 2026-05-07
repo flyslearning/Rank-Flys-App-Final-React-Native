@@ -32,6 +32,10 @@ import EbookNodesScreen from "../screens/ebookscreens/EbookNodesScreen";
 import PdfViewerScreen from "../screens/ebookscreens/PdfViewerScreen";
 import DoubtScreen from "../screens/DoubtScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import ToolPage from "../screens/extrascreens/ToolPage"
+import Scholarship from "../screens/scholarshipscreens/ScholarshipScreens"
+import Mentorship from "../screens/mentorshipscreens/MentorshipScreens"
+import Contact from "../screens/extrascreens/Contact"
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
@@ -187,6 +191,31 @@ export default function RootNavigator() {
             name="FlashCard"
             component={FlashCard}
             options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Profile"
+            component={ProfileScreen}
+            options={{ headerShown: true }}
+          />
+          <Stack.Screen
+            name="Study Tools"
+            component={ToolPage}
+            options={{ headerShown: true }}
+          />
+          <Stack.Screen
+            name="Scholarship"
+            component={Scholarship}
+            options={{ headerShown: true }}
+          />
+          <Stack.Screen
+            name="Mentorship"
+            component={Mentorship}
+            options={{ headerShown: true }}
+          />
+          <Stack.Screen
+            name="Contact Us"
+            component={Contact}
+            options={{ headerShown: true }}
           />
            </>
           

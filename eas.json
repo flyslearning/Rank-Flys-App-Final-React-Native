@@ -6,13 +6,34 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_AUTH_API": "https://api.flyslearning.com/auth/api/v1",
+        "EXPO_PUBLIC_TEST_API": "https://api.flyslearning.com/test/api/v1",
+        "EXPO_PUBLIC_EBOOK_API": "https://api.flyslearning.com/ebook",
+        "EXPO_PUBLIC_PAYMENT_API": "https://api.flyslearning.com/payment/api",
+        "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_AUTH_API": "https://api.flyslearning.com/auth/api/v1",
+        "EXPO_PUBLIC_TEST_API": "https://api.flyslearning.com/test/api/v1",
+        "EXPO_PUBLIC_EBOOK_API": "https://api.flyslearning.com/ebook",
+        "EXPO_PUBLIC_PAYMENT_API": "https://api.flyslearning.com/payment/api",
+        "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_AUTH_API": "https://api.flyslearning.com/auth/api/v1",
+        "EXPO_PUBLIC_TEST_API": "https://api.flyslearning.com/test/api/v1",
+        "EXPO_PUBLIC_EBOOK_API": "https://api.flyslearning.com/ebook",
+        "EXPO_PUBLIC_PAYMENT_API": "https://api.flyslearning.com/payment/api",
+        "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api"
+      }
     }
   },
   "submit": {

@@ -34,9 +34,9 @@ export const storage = {
   },
 
   async clear() {
-    await AsyncStorage.clear();
+  console.warn("storage.clear() disabled to protect intro_seen");
   },
-};
+  };
 
 export const authClient = axios.create({
   baseURL: AUTH_BASE_URL,

@@ -1,183 +1,167 @@
-import React from "react";
-import { Pressable, Text, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+// src/components/home/ContinueCard.tsx
+
+import React, { useEffect, useRef, useState } from "react";
+import {
+  Image,
+  StyleSheet,
+  Dimensions,
+  FlatList,
+  View,
+  Pressable,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+} from "react-native";
+
+const { width } = Dimensions.get("window");
+
+const SLIDER_WIDTH = width - 40;
+const SLIDER_HEIGHT = SLIDER_WIDTH * 0.5625;
 
 type Props = {
-  title: string;
-  subtitle: string;
-  progress?: number;
-  onPress: () => void;
+  onPress?: () => void;
 };
 
-export default function ContinueLearningCard({
-  title,
-  subtitle,
-  progress = 45,
-  onPress,
-}: Props) {
-  const safeProgress = Math.max(0, Math.min(progress, 100));
+const images = [
+  require("../../assets/Ads/1.png"),
+  require("../../assets/Ads/2.png"),
+  require("../../assets/Ads/3.png"),
+  require("../../assets/Ads/4.png"),
+  require("../../assets/Ads/5.png"),
+  require("../../assets/Ads/6.png"),
+  require("../../assets/Ads/7.png"),
+];
+
+const sliderImages = [
+  images[images.length - 1],
+  ...images,
+  images[0],
+];
+
+export default function ContinueLearningCard({ onPress }: Props) {
+  const flatListRef = useRef<FlatList>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const currentIndexRef = useRef(1);
+
+  useEffect(() => {
+    setTimeout(() => {
+      flatListRef.current?.scrollToIndex({
+        index: 1,
+        animated: false,
+      });
+    }, 50);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const nextIndex = currentIndexRef.current + 1;
+
+      flatListRef.current?.scrollToIndex({
+        index: nextIndex,
+        animated: true,
+      });
+
+      currentIndexRef.current = nextIndex;
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleScrollEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    let index = Math.round(
+      event.nativeEvent.contentOffset.x / SLIDER_WIDTH
+    );
+
+    if (index === 0) {
+      index = images.length;
+
+      flatListRef.current?.scrollToIndex({
+        index,
+        animated: false,
+      });
+    }
+
+    if (index === sliderImages.length - 1) {
+      index = 1;
+
+      flatListRef.current?.scrollToIndex({
+        index,
+        animated: false,
+      });
+    }
+
+    currentIndexRef.current = index;
+    setActiveIndex(index - 1);
+  };
 
   return (
-    <Pressable style={styles.card} onPress={onPress}>
-      <View style={styles.glowCircleOne} />
-      <View style={styles.glowCircleTwo} />
+    <View style={styles.wrapper}>
+      <FlatList
+        ref={flatListRef}
+        data={sliderImages}
+        horizontal
+        pagingEnabled
+        bounces={false}
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(_, index) => index.toString()}
+        onMomentumScrollEnd={handleScrollEnd}
+        getItemLayout={(_, index) => ({
+          length: SLIDER_WIDTH,
+          offset: SLIDER_WIDTH * index,
+          index,
+        })}
+        renderItem={({ item }) => (
+          <Pressable style={styles.slide} onPress={onPress}>
+            <Image source={item} style={styles.image} resizeMode="cover" />
+          </Pressable>
+        )}
+      />
 
-      <View style={styles.topRow}>
-        <View style={styles.iconBox}>
-          <Ionicons name="book-outline" size={26} color="#FFFFFF" />
-        </View>
-
-        <View style={styles.badge}>
-          <Ionicons name="flash" size={13} color="#FACC15" />
-          <Text style={styles.badgeText}>IN PROGRESS</Text>
-        </View>
+      <View style={styles.dots}>
+        {images.map((_, index) => (
+          <View
+            key={index}
+            style={[
+              styles.dot,
+              activeIndex === index && styles.activeDot,
+            ]}
+          />
+        ))}
       </View>
-
-      <Text style={styles.label}>Continue Learning</Text>
-
-      <Text numberOfLines={2} style={styles.title}>{title}</Text>
-
-      <Text numberOfLines={1} style={styles.subtitle}>{subtitle}</Text>
-
-      <View style={styles.bottomRow}>
-        <View style={styles.progressInfo}>
-          <Text style={styles.progressNumber}>{safeProgress}%</Text>
-          <Text style={styles.progressLabel}>completed</Text>
-        </View>
-
-        <View style={styles.playButton}>
-          <Ionicons name="play" size={18} color="#2563EB" />
-        </View>
-      </View>
-
-      <View style={styles.progressBg}>
-        <View style={[styles.progressFill, { width: `${safeProgress}%` }]} />
-      </View>
-    </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    position: "relative",
-    overflow: "hidden",
-    backgroundColor: "#2563EB",
-    borderRadius: 30,
-    padding: 20,
+  wrapper: {
     marginBottom: 24,
-    shadowColor: "#2563EB",
-    shadowOpacity: 0.28,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 10,
   },
-  glowCircleOne: {
-    position: "absolute",
-    width: 170,
-    height: 170,
-    borderRadius: 85,
-    backgroundColor: "rgba(255,255,255,0.13)",
-    right: -55,
-    top: -60,
-  },
-  glowCircleTwo: {
-    position: "absolute",
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    left: -45,
-    bottom: -50,
-  },
-  topRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  iconBox: {
-    width: 54,
-    height: 54,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.25)",
-  },
-  badge: {
-    height: 30,
-    borderRadius: 15,
-    paddingHorizontal: 11,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(15,23,42,0.22)",
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    letterSpacing: 0.8,
-  },
-  label: {
-    fontSize: 13,
-    color: "#DBEAFE",
-    fontWeight: "800",
-    marginTop: 18,
-  },
-  title: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "900",
-    marginTop: 5,
-    letterSpacing: -0.4,
-  },
-  subtitle: {
-    color: "#DBEAFE",
-    fontSize: 14,
-    fontWeight: "600",
-    marginTop: 7,
-  },
-  bottomRow: {
-    marginTop: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  progressInfo: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-  },
-  progressNumber: {
-    color: "#FFFFFF",
-    fontSize: 28,
-    fontWeight: "900",
-  },
-  progressLabel: {
-    color: "#DBEAFE",
-    fontSize: 12,
-    fontWeight: "700",
-    marginLeft: 6,
-    marginBottom: 5,
-  },
-  playButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  progressBg: {
-    height: 8,
-    backgroundColor: "rgba(255,255,255,0.24)",
-    borderRadius: 20,
-    marginTop: 14,
+  slide: {
+    width: SLIDER_WIDTH,
+    height: SLIDER_HEIGHT,
+    borderRadius: 26,
     overflow: "hidden",
+    backgroundColor: "#E5E7EB",
   },
-  progressFill: {
+  image: {
+    width: "100%",
     height: "100%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
+  },
+  dots: {
+    marginTop: 12,
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 7,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 7,
+    backgroundColor: "#CBD5E1",
+  },
+  activeDot: {
+    width: 20,
+    backgroundColor: "#2563EB",
   },
 });
