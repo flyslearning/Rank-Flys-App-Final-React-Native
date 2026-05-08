@@ -80,6 +80,7 @@ export async function checkToolSync(module: string, clientVersion: number) {
       params: {
         module,
         client_version: clientVersion,
+        local_version: clientVersion,
       },
     }
   );
@@ -204,3 +205,5 @@ export async function getAnalyticsDashboard() {
   const res = await toolClient.get(apiPath("/tools/analytics/dashboard"));
   return res.data;
 }
+
+

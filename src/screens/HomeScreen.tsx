@@ -69,31 +69,33 @@ export default function HomeScreen({ navigation }: any) {
           style={styles.featureCard}
           onPress={() => navigation.navigate("Mentorship")}
         >
-          <View style={styles.featureIconBox}>
-            <Ionicons name="people-outline" size={25} color="#2563EB" />
+          <View style={[styles.featureIconBox, styles.mentorshipBox]}>
+            <Ionicons name="people-outline" size={25} color="#7C3AED" />
           </View>
 
           <View style={styles.featureTextBox}>
-            <Text style={styles.featureTag}>Expert Guidance</Text>
+            <Text style={[styles.featureTag, styles.mentorshipText]}>
+              Expert Guidance
+            </Text>
             <Text style={styles.featureTitle}>Mentorship Sessions</Text>
             <Text style={styles.featureSubtitle}>
               Get personal guidance from mentors for your study journey.
             </Text>
           </View>
 
-          <Ionicons name="chevron-forward" size={22} color="#2563EB" />
+          <Ionicons name="chevron-forward" size={22} color="#7C3AED" />
         </Pressable>
 
         <Pressable
           style={styles.featureCard}
           onPress={() => navigation.navigate("Scholarship")}
         >
-          <View style={[styles.featureIconBox, styles.purpleBox]}>
-            <Ionicons name="trophy-outline" size={25} color="#7C3AED" />
+          <View style={[styles.featureIconBox, styles.scholarshipBox]}>
+            <Ionicons name="trophy-outline" size={25} color="#2563EB" />
           </View>
 
           <View style={styles.featureTextBox}>
-            <Text style={[styles.featureTag, styles.purpleText]}>
+            <Text style={[styles.featureTag, styles.scholarshipText]}>
               Rewards & Contest
             </Text>
             <Text style={styles.featureTitle}>Scholarship Program</Text>
@@ -102,8 +104,9 @@ export default function HomeScreen({ navigation }: any) {
             </Text>
           </View>
 
-          <Ionicons name="chevron-forward" size={22} color="#7C3AED" />
+          <Ionicons name="chevron-forward" size={22} color="#2563EB" />
         </Pressable>
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -132,7 +135,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingTop: 14,
-    paddingBottom: 40,
+    paddingBottom: 42,
   },
 
   quickSection: {
@@ -174,14 +177,17 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 20,
-    backgroundColor: "#EFF6FF",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 14,
   },
 
-  purpleBox: {
+  mentorshipBox: {
     backgroundColor: "#F5F3FF",
+  },
+
+  scholarshipBox: {
+    backgroundColor: "#EFF6FF",
   },
 
   featureTextBox: {
@@ -191,12 +197,15 @@ const styles = StyleSheet.create({
   featureTag: {
     fontSize: 12,
     fontWeight: "900",
-    color: "#2563EB",
     marginBottom: 5,
   },
 
-  purpleText: {
+  mentorshipText: {
     color: "#7C3AED",
+  },
+
+  scholarshipText: {
+    color: "#2563EB",
   },
 
   featureTitle: {

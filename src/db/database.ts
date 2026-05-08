@@ -112,6 +112,37 @@ CREATE TABLE IF NOT EXISTS test_questions (
       notes TEXT DEFAULT '',
       is_active INTEGER DEFAULT 1
     );
+       CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS mentorships (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT,
+      description TEXT,
+      image_url TEXT,
+      explore_text TEXT,
+      goal_class_id TEXT,
+      visibility TEXT,
+      created_at TEXT,
+      price_paise INTEGER DEFAULT 0,
+      price_rupees INTEGER DEFAULT 0,
+      is_free INTEGER DEFAULT 0,
+      has_access INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS mentorship_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mentorship_id TEXT NOT NULL,
+      content_id TEXT NOT NULL,
+      content_type TEXT NOT NULL
+    );
     
 
     CREATE INDEX IF NOT EXISTS idx_tool_subjects_goal

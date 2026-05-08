@@ -7,6 +7,7 @@ export const TEST_BASE_URL = process.env.EXPO_PUBLIC_TEST_API;
 export const EBOOK_BASE_URL = process.env.EXPO_PUBLIC_EBOOK_API;
 export const PAYMENT_BASE_URL = process.env.EXPO_PUBLIC_PAYMENT_API;
 export const TOOL_BASE_URL = process.env.EXPO_PUBLIC_TOOL_API;
+export const MENTORSHIP_BASE_URL = process.env.EXPO_PUBLIC_MENTORSHIP_API;
 
 
 export const storage = {
@@ -47,6 +48,13 @@ export const authClient = axios.create({
 });
 export const toolClient = axios.create({
   baseURL: TOOL_BASE_URL,
+  timeout: 15000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+export const mentorshipClient = axios.create({
+  baseURL: MENTORSHIP_BASE_URL,
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
@@ -167,6 +175,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
     ebookClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
     paymentClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
     toolClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
+    mentorshipClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
 
     processQueue(null, newAccessToken);
 
@@ -200,9 +209,12 @@ testClient.interceptors.request.use(attachToken);
 ebookClient.interceptors.request.use(attachToken);
 paymentClient.interceptors.request.use(attachToken);
 toolClient.interceptors.request.use(attachToken);
+mentorshipClient.interceptors.request.use(attachToken);
+
 
 attachRefreshInterceptor(authClient);
 attachRefreshInterceptor(testClient);
 attachRefreshInterceptor(ebookClient);
 attachRefreshInterceptor(paymentClient);
 attachRefreshInterceptor(toolClient);
+attachRefreshInterceptor(mentorshipClient);

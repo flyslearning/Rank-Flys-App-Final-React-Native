@@ -12,7 +12,8 @@
         "EXPO_PUBLIC_TEST_API": "https://api.flyslearning.com/test/api/v1",
         "EXPO_PUBLIC_EBOOK_API": "https://api.flyslearning.com/ebook",
         "EXPO_PUBLIC_PAYMENT_API": "https://api.flyslearning.com/payment/api",
-        "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api"
+        "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api",
+        "EXPO_PUBLIC_MENTORSHIP_API": "https://api.flyslearning.com/tools"
       }
     },
     "preview": {
@@ -22,7 +23,8 @@
         "EXPO_PUBLIC_TEST_API": "https://api.flyslearning.com/test/api/v1",
         "EXPO_PUBLIC_EBOOK_API": "https://api.flyslearning.com/ebook",
         "EXPO_PUBLIC_PAYMENT_API": "https://api.flyslearning.com/payment/api",
-        "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api"
+        "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api",
+        "EXPO_PUBLIC_MENTORSHIP_API": "https://api.flyslearning.com/tools"
       }
     },
     "production": {
