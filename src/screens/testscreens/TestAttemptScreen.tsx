@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
+  Image,
   StatusBar,
   SafeAreaView,
   BackHandler,
@@ -585,6 +586,15 @@ function QuestionCard({
   isMarked: boolean;
 }) {
   const q: any = currentQuestion;
+  const imageUrl =
+  q?.image_url?.String ||
+  q?.image_url ||
+  q?.image ||
+  "";
+
+const hasImage =
+  typeof imageUrl === "string" &&
+  imageUrl.trim().length > 0;
 
   return (
     <View style={styles.questionCard}>
@@ -603,7 +613,17 @@ function QuestionCard({
       <Text style={styles.questionText}>
         {q.question_text || q.question}
       </Text>
+      {hasImage && (
+        <View style={styles.questionImageWrapper}>
+          <Image
+            source={{ uri: imageUrl }}
+            style={styles.questionImage}
+            resizeMode="cover"
+          />
+        </View>
+      )}
     </View>
+    
   );
 }
 
@@ -1663,4 +1683,17 @@ const styles = StyleSheet.create({
     color: "#64748b",
     fontWeight: "900",
   },
+  questionImageWrapper: {
+  width: "100%",
+  aspectRatio: 16 / 9,
+  borderRadius: 16,
+  overflow: "hidden",
+  marginTop: 16,
+  backgroundColor: "#e2e8f0",
+},
+
+questionImage: {
+  width: "100%",
+  height: "100%",
+},
 });

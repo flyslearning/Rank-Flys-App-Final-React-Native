@@ -35,7 +35,33 @@ export const EbookDb = {
   },
 
   saveSeries(items: CachedEbookSeries[]) {
-    this.init();
+  this.init();
+
+  db.withTransactionSync(() => {
+    const ids = items.map((item) => item.id).filter(Boolean);
+
+    if (ids.length > 0) {
+      const placeholders = ids.map(() => "?").join(",");
+
+      db.runSync(
+        `
+        DELETE FROM ebook_nodes
+        WHERE series_id NOT IN (${placeholders})
+        `,
+        ids
+      );
+
+      db.runSync(
+        `
+        DELETE FROM ebook_series
+        WHERE id NOT IN (${placeholders})
+        `,
+        ids
+      );
+    } else {
+      db.runSync(`DELETE FROM ebook_nodes`);
+      db.runSync(`DELETE FROM ebook_series`);
+    }
 
     const stmt = db.prepareSync(`
       INSERT OR REPLACE INTO ebook_series
@@ -68,7 +94,8 @@ export const EbookDb = {
     } finally {
       stmt.finalizeSync();
     }
-  },
+  });
+},
 
   getSeries(): CachedEbookSeries[] {
     this.init();

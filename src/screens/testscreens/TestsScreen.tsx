@@ -22,6 +22,7 @@ import {
   saveTests,
   updateTestSeriesAccess,
   updateTestSeriesCount,
+  getTestSeriesAccessLocal,
 } from "../../db/testDb";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Tests">;
@@ -33,11 +34,16 @@ export default function TestsScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const [hasAccess, setHasAccess] = useState(true);
-  const [isFree, setIsFree] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
+  const [isFree, setIsFree] = useState(false);
 
   const loadTests = useCallback(async () => {
     try {
+      const localAccess = getTestSeriesAccessLocal(seriesId);
+
+      setHasAccess(localAccess.has_access);
+      setIsFree(localAccess.is_free);
+
       const localTests = getTestsLocal(seriesId) as any[];
 
       if (localTests.length > 0) {
@@ -64,6 +70,11 @@ export default function TestsScreen({ route, navigation }: Props) {
       setTests(updatedLocalTests);
     } catch (error: any) {
       console.log("Tests error:", error.response?.data || error.message);
+
+      const localAccess = getTestSeriesAccessLocal(seriesId);
+
+      setHasAccess(localAccess.has_access);
+      setIsFree(localAccess.is_free);
 
       const localTests = getTestsLocal(seriesId) as any[];
 

@@ -31,33 +31,72 @@ export function getTestSeriesLocal() {
 }
 
 export function saveTestSeries(series: any[]) {
-  for (const item of series) {
-    db.runSync(
-      `
-      INSERT OR REPLACE INTO test_series
-      (
-        id, title, description, explore_text, image_url,
-        created_at, price, price_paise, has_access,
-        is_free, tests_count, cached_at
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      [
-        item.id,
-        item.title ?? "",
-        item.description ?? "",
-        item.explore_text ?? "",
-        getImageUrl(item.image_url),
-        item.created_at ?? "",
-        item.price ?? 0,
-        item.price_paise ?? 0,
-        item.has_access ? 1 : 0,
-        item.is_free ? 1 : 0,
-        item.testsCount ?? item.tests_count ?? 0,
-        Date.now(),
-      ]
-    );
-  }
+  db.withTransactionSync(() => {
+    const ids = series.map((item) => item.id).filter(Boolean);
+
+    if (ids.length > 0) {
+      const placeholders = ids.map(() => "?").join(",");
+
+      db.runSync(
+        `
+        DELETE FROM test_questions
+        WHERE test_id IN (
+          SELECT id FROM test_items
+          WHERE series_id NOT IN (${placeholders})
+        )
+        `,
+        ids
+      );
+
+      db.runSync(
+        `
+        DELETE FROM test_items
+        WHERE series_id NOT IN (${placeholders})
+        `,
+        ids
+      );
+
+      db.runSync(
+        `
+        DELETE FROM test_series
+        WHERE id NOT IN (${placeholders})
+        `,
+        ids
+      );
+    } else {
+      db.runSync(`DELETE FROM test_questions`);
+      db.runSync(`DELETE FROM test_items`);
+      db.runSync(`DELETE FROM test_series`);
+    }
+
+    for (const item of series) {
+      db.runSync(
+        `
+        INSERT OR REPLACE INTO test_series
+        (
+          id, title, description, explore_text, image_url,
+          created_at, price, price_paise, has_access,
+          is_free, tests_count, cached_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          item.id,
+          item.title ?? "",
+          item.description ?? "",
+          item.explore_text ?? "",
+          getImageUrl(item.image_url),
+          item.created_at ?? "",
+          item.price ?? 0,
+          item.price_paise ?? 0,
+          item.has_access ? 1 : 0,
+          item.is_free ? 1 : 0,
+          item.testsCount ?? item.tests_count ?? 0,
+          Date.now(),
+        ]
+      );
+    }
+  });
 }
 
 export function getTestsLocal(seriesId: string) {
@@ -132,6 +171,23 @@ export function getQuestionsLocal(testId: string) {
     `,
     [testId]
   );
+}
+export function getTestSeriesAccessLocal(seriesId: string) {
+  const row: any = db.getFirstSync(
+    `
+    SELECT
+      has_access = 1 AS has_access,
+      is_free = 1 AS is_free
+    FROM test_series
+    WHERE id = ?
+    `,
+    [seriesId]
+  );
+
+  return {
+    has_access: row?.has_access === 1 || row?.has_access === true,
+    is_free: row?.is_free === 1 || row?.is_free === true,
+  };
 }
 
 export function saveQuestions(testId: string, questions: any[]) {
