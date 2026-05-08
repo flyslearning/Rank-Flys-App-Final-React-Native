@@ -17,6 +17,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, Question } from "../../types";
+import ImageViewer from "react-native-image-zoom-viewer";
 import { TestAPI } from "../../api/test.api";
 import { useTestStore } from "../../store/test.store";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -42,7 +43,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
   const { testId, seriesId } = route.params as any;
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  
+
   const isSmall = width < 370;
 
   const {
@@ -64,6 +65,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
   const [paletteVisible, setPaletteVisible] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [allowExit, setAllowExit] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
 
   const questionStartTime = useRef(Date.now());
   const hasStartedRef = useRef(false);
@@ -183,8 +185,8 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
         Alert.alert(
           "Error",
           error?.response?.data?.message ||
-            error?.response?.data?.error ||
-            "Submit failed"
+          error?.response?.data?.error ||
+          "Submit failed"
         );
       } finally {
         setSubmitting(false);
@@ -274,9 +276,9 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
       Alert.alert(
         "Error",
         error?.response?.data?.message ||
-          error?.response?.data?.error ||
-          error.message ||
-          "Test start failed"
+        error?.response?.data?.error ||
+        error.message ||
+        "Test start failed"
       );
     } finally {
       setLoading(false);
@@ -462,7 +464,7 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <QuestionCard currentQuestion={currentQuestion} isMarked={isMarked} />
+        <QuestionCard currentQuestion={currentQuestion} isMarked={isMarked} onImagePress={(url) => setPreviewImageUrl(url)} />
 
         <OptionsList
           options={options}
@@ -502,6 +504,10 @@ export default function TestAttemptScreen({ route, navigation }: Props) {
         remainingSeconds={remainingSeconds}
         formatTime={formatTime}
         submitting={submitting}
+      />
+      <ImagePreviewModal
+        imageUrl={previewImageUrl}
+        onClose={() => setPreviewImageUrl(null)}
       />
     </SafeAreaView>
   );
@@ -581,20 +587,18 @@ function TestStatusBar({
 function QuestionCard({
   currentQuestion,
   isMarked,
+  onImagePress,
 }: {
   currentQuestion: Question;
   isMarked: boolean;
+  onImagePress: (url: string) => void;
 }) {
   const q: any = currentQuestion;
-  const imageUrl =
-  q?.image_url?.String ||
-  q?.image_url ||
-  q?.image ||
-  "";
+  const imageUrl = q?.image_url || "";
 
-const hasImage =
-  typeof imageUrl === "string" &&
-  imageUrl.trim().length > 0;
+  const hasImage =
+    typeof imageUrl === "string" &&
+    imageUrl.trim().length > 0;
 
   return (
     <View style={styles.questionCard}>
@@ -614,16 +618,50 @@ const hasImage =
         {q.question_text || q.question}
       </Text>
       {hasImage && (
-        <View style={styles.questionImageWrapper}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          style={styles.questionImageWrapper}
+          onPress={() => onImagePress(imageUrl)}
+        >
           <Image
             source={{ uri: imageUrl }}
             style={styles.questionImage}
             resizeMode="cover"
           />
-        </View>
+        </TouchableOpacity>
       )}
     </View>
-    
+
+  );
+}
+function ImagePreviewModal({
+  imageUrl,
+  onClose,
+}: {
+  imageUrl: string | null;
+  onClose: () => void;
+}) {
+  if (!imageUrl) return null;
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        <TouchableOpacity
+          style={styles.imagePreviewClose}
+          onPress={onClose}
+        >
+          <Ionicons name="close" size={26} color="#ffffff" />
+        </TouchableOpacity>
+
+        <ImageViewer
+          imageUrls={[{ url: imageUrl }]}
+          enableSwipeDown
+          onSwipeDown={onClose}
+          saveToLocalByLongPress={false}
+          backgroundColor="#000"
+        />
+      </View>
+    </Modal>
   );
 }
 
@@ -725,9 +763,9 @@ function BottomNavigation({
 
   return (
     <View
-  style={[
-    styles.bottomNavWrapper,
-    { bottom: Math.max(bottomInset, 6), },]}>
+      style={[
+        styles.bottomNavWrapper,
+        { bottom: Math.max(bottomInset, 6), },]}>
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={[styles.previousBtn, currentQuestionIndex === 0 && styles.disabledBtn]}
@@ -857,10 +895,10 @@ function QuestionPaletteModal({
         activeDifficulty === "All" && activeSubject === "All"
           ? `${item.difficulty} • ${item.subject}`
           : activeSubject === "All"
-          ? item.subject
-          : activeDifficulty === "All"
-          ? item.difficulty
-          : item.subject;
+            ? item.subject
+            : activeDifficulty === "All"
+              ? item.difficulty
+              : item.subject;
 
       if (!groups[title]) groups[title] = [];
       groups[title].push(item);
@@ -1696,4 +1734,19 @@ questionImage: {
   width: "100%",
   height: "100%",
 },
+
+
+imagePreviewClose: {
+  position: "absolute",
+  top: 45,
+  right: 20,
+  zIndex: 10,
+  width: 44,
+  height: 44,
+  borderRadius: 22,
+  backgroundColor: "rgba(255,255,255,0.18)",
+  justifyContent: "center",
+  alignItems: "center",
+},
+
 });
