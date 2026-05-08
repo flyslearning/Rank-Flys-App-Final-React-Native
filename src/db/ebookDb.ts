@@ -23,6 +23,7 @@ export type CachedEbookNode = {
   type: string;
   parent_id?: string | null;
   file_url?: string | null;
+  is_demo?: boolean;
   order?: number;
   sort_order?: number;
   created_at?: string | null;
@@ -150,10 +151,10 @@ saveNodes(seriesId: string, parentId: string | null, items: CachedEbookNode[]) {
     INSERT OR REPLACE INTO ebook_nodes
     (
       id, series_id, name, title, type, parent_id,
-      file_url, node_order, sort_order, has_children,
+      file_url, is_demo, node_order, sort_order, has_children,
       created_at, cached_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   try {
@@ -173,6 +174,7 @@ saveNodes(seriesId: string, parentId: string | null, items: CachedEbookNode[]) {
         item.type || "file",
         finalParentId,
         item.file_url || null,
+        item.is_demo === true || item.is_demo === 1 || item.is_demo === "true" ? 1 : 0,
         nodeOrder,
         Number(item.sort_order ?? nodeOrder),
         item.has_children === true || item.type === "folder" ? 1 : 0,
@@ -218,6 +220,7 @@ getNodes(seriesId: string, parentId: string | null): CachedEbookNode[] {
     type: row.type || "file",
     parent_id: row.parent_id || null,
     file_url: row.file_url || null,
+    is_demo: row.is_demo === 1,
     order: Number(row.node_order || 0),
     sort_order: Number(row.sort_order || 0),
     created_at: row.created_at || "",

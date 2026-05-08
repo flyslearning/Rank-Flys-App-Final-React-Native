@@ -119,9 +119,9 @@ export function saveTests(seriesId: string, tests: any[]) {
       INSERT OR REPLACE INTO test_items
       (
         id, series_id, title, description,
-        duration_minutes, total_questions, cached_at
+        duration_minutes, total_questions, is_demo, cached_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         test.id,
@@ -130,6 +130,7 @@ export function saveTests(seriesId: string, tests: any[]) {
         test.description ?? "",
         test.duration_minutes ?? 0,
         test.total_questions ?? 0,
+        test.is_demo === true || test.is_demo === 1 || test.is_demo === "true" ? 1 : 0,
         Date.now(),
       ]
     );

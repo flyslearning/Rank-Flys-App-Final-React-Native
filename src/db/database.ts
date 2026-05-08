@@ -28,6 +28,7 @@ export function initDatabase() {
       type TEXT,
       parent_id TEXT,
       file_url TEXT,
+      is_demo INTEGER DEFAULT 0,
       node_order INTEGER,
       sort_order INTEGER,
       has_children INTEGER,
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS test_items (
   description TEXT,
   duration_minutes INTEGER,
   total_questions INTEGER,
+  is_demo INTEGER DEFAULT 0,
   cached_at INTEGER
 );
 
@@ -110,6 +112,7 @@ CREATE TABLE IF NOT EXISTS test_questions (
       notes TEXT DEFAULT '',
       is_active INTEGER DEFAULT 1
     );
+    
 
     CREATE INDEX IF NOT EXISTS idx_tool_subjects_goal
     ON tool_subjects(goal_class_id);

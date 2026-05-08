@@ -45,6 +45,14 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
     return node.type;
   };
 
+  const isDemoUnlocked = (node: any) => {
+    return node?.is_demo === true || node?.is_demo === 1 || node?.is_demo === "true";
+  };
+
+  const canOpenNode = (node: EbookNode) => {
+    return hasAccess || isDemoUnlocked(node);
+  };
+
   const sortNodesOrderWise = (data: EbookNode[]) => {
     return [...data].sort((a: any, b: any) => {
       const orderA = Number(a.order ?? a.sort_order ?? 0);
@@ -81,12 +89,12 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
         const cachedNodes = EbookDb.getNodes(seriesId, safeParentId);
 
         if (cachedNodes.length > 0) {
-        const cachedAccess = EbookDb.getSeriesAccess(seriesId);
+          const cachedAccess = EbookDb.getSeriesAccess(seriesId);
 
-        setHasAccess(cachedAccess.hasAccess || cachedAccess.isFree);
-        setNodes(sortNodesOrderWise(cachedNodes as any));
-        setLoading(false);
-      }
+          setHasAccess(cachedAccess.hasAccess || cachedAccess.isFree);
+          setNodes(sortNodesOrderWise(cachedNodes as any));
+          setLoading(false);
+        }
 
         const res = await EbookAPI.getNodes(seriesId, safeParentId);
 
@@ -109,6 +117,10 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
           type: item.type || "file",
           parent_id: item.parent_id ?? safeParentId,
           file_url: item.file_url || null,
+          is_demo:
+            item.is_demo === true ||
+            item.is_demo === 1 ||
+            item.is_demo === "true",
           order: Number(item.order ?? item.sort_order ?? 0),
           sort_order: Number(item.sort_order ?? item.order ?? 0),
           created_at: item.created_at || "",
@@ -117,10 +129,8 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
 
         EbookDb.saveNodes(seriesId, safeParentId, normalizedNodes as any);
 
-        const latestLocalNodes = EbookDb.getNodes(seriesId, safeParentId);
-
         setHasAccess(access);
-        setNodes(sortNodesOrderWise(latestLocalNodes as any));
+        setNodes(sortNodesOrderWise(normalizedNodes as any));
       } catch (error: any) {
         console.log("Ebook nodes error:", error?.response?.data || error.message);
 
@@ -196,7 +206,7 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
   };
 
   const openNode = async (node: EbookNode) => {
-    if (!hasAccess) {
+    if (!canOpenNode(node)) {
       showPurchaseAlert();
       return;
     }
@@ -229,6 +239,8 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
   const renderNode = ({ item }: { item: EbookNode }) => {
     const type = normalizeNodeType(item);
     const isFolder = type === "folder";
+    const isDemo = isDemoUnlocked(item);
+    const unlocked = canOpenNode(item);
 
     return (
       <TouchableOpacity
@@ -239,19 +251,21 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
         <View
           style={[
             styles.iconBox,
-            isFolder ? styles.folderIconBox : styles.fileIconBox,
+            isDemo ? styles.demoIconBox : isFolder ? styles.folderIconBox : styles.fileIconBox,
           ]}
         >
           <Ionicons
             name={
-              !hasAccess
+              !unlocked
                 ? "lock-closed-outline"
+                : isDemo
+                ? "sparkles-outline"
                 : isFolder
                 ? "folder-open-outline"
                 : "document-text-outline"
             }
             size={34}
-            color={!hasAccess ? "#f97316" : isFolder ? "#d97706" : "#2563eb"}
+            color={!unlocked ? "#f97316" : isDemo ? "#059669" : isFolder ? "#d97706" : "#2563eb"}
           />
         </View>
 
@@ -260,34 +274,36 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
             <View
               style={[
                 styles.typeBadge,
-                isFolder ? styles.folderBadge : styles.fileBadge,
+                isDemo ? styles.demoBadge : isFolder ? styles.folderBadge : styles.fileBadge,
               ]}
             >
               <Ionicons
                 name={
-                  !hasAccess
+                  !unlocked
                     ? "lock-closed-outline"
+                    : isDemo
+                    ? "gift-outline"
                     : isFolder
                     ? "albums-outline"
                     : "reader-outline"
                 }
                 size={13}
-                color={!hasAccess ? "#c2410c" : isFolder ? "#92400e" : "#1d4ed8"}
+                color={!unlocked ? "#c2410c" : isDemo ? "#047857" : isFolder ? "#92400e" : "#1d4ed8"}
               />
 
               <Text
                 style={[
                   styles.typeBadgeText,
-                  isFolder ? styles.folderBadgeText : styles.fileBadgeText,
+                  isDemo ? styles.demoBadgeText : isFolder ? styles.folderBadgeText : styles.fileBadgeText,
                 ]}
               >
-                {!hasAccess ? "Locked" : isFolder ? "Folder" : "PDF / File"}
+                {!unlocked ? "Locked" : isDemo ? "Free Demo" : isFolder ? "Folder" : "PDF / File"}
               </Text>
             </View>
 
             <Ionicons
               name={
-                !hasAccess
+                !unlocked
                   ? "lock-closed-outline"
                   : isFolder
                   ? "chevron-forward"
@@ -303,8 +319,10 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
           </Text>
 
           <Text style={styles.cardDescription} numberOfLines={2}>
-            {!hasAccess
+            {!unlocked
               ? "Purchase this series first, then you can access this ebook content."
+              : isDemo
+              ? "Free demo unlocked. Tap to preview this ebook content."
               : isFolder
               ? item.has_children
                 ? "Open this folder to view chapters and files."
@@ -316,8 +334,10 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
             <View style={styles.infoChip}>
               <Ionicons
                 name={
-                  !hasAccess
+                  !unlocked
                     ? "lock-closed-outline"
+                    : isDemo
+                    ? "gift-outline"
                     : isFolder
                     ? "layers-outline"
                     : "book-outline"
@@ -327,22 +347,30 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
               />
 
               <Text style={styles.infoChipText}>
-                {!hasAccess
+                {!unlocked
                   ? "Purchase Required"
+                  : isDemo
+                  ? "Demo Access"
                   : isFolder
                   ? "Chapter Folder"
                   : "Reading Material"}
               </Text>
             </View>
 
-            <View style={[styles.exploreBtn, !hasAccess && styles.lockedBtn]}>
+            <View
+              style={[
+                styles.exploreBtn,
+                !unlocked && styles.lockedBtn,
+                isDemo && styles.demoBtn,
+              ]}
+            >
               <Text style={styles.exploreText}>
-                {!hasAccess ? "Buy First" : isFolder ? "Open" : "Read"}
+                {!unlocked ? "Buy First" : isDemo ? "Preview" : isFolder ? "Open" : "Read"}
               </Text>
 
               <Ionicons
                 name={
-                  !hasAccess
+                  !unlocked
                     ? "lock-closed-outline"
                     : isFolder
                     ? "chevron-forward"
@@ -476,11 +504,11 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 12, color: "#64748b", fontWeight: "800" },
   header: {
     paddingHorizontal: 18,
-    paddingTop: Platform.OS === "android" ? 4 : 2,
-    paddingBottom: 10,
+    paddingTop: 0,
+    paddingBottom: 6,
   },
   searchBox: {
-    height: 56,
+    height: 52,
     borderRadius: 18,
     backgroundColor: "#ffffff",
     borderWidth: 1,
@@ -584,6 +612,7 @@ const styles = StyleSheet.create({
   },
   folderIconBox: { backgroundColor: "#fef3c7" },
   fileIconBox: { backgroundColor: "#eff6ff" },
+  demoIconBox: { backgroundColor: "#d1fae5" },
   cardBody: { flex: 1 },
   topRow: {
     flexDirection: "row",
@@ -600,9 +629,11 @@ const styles = StyleSheet.create({
   },
   folderBadge: { backgroundColor: "#fef3c7" },
   fileBadge: { backgroundColor: "#dbeafe" },
+  demoBadge: { backgroundColor: "#d1fae5" },
   typeBadgeText: { fontSize: 11, fontWeight: "900" },
   folderBadgeText: { color: "#92400e" },
   fileBadgeText: { color: "#1d4ed8" },
+  demoBadgeText: { color: "#047857" },
   cardTitle: {
     marginTop: 10,
     color: "#0f172a",
@@ -644,6 +675,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   lockedBtn: { backgroundColor: "#f97316" },
+  demoBtn: { backgroundColor: "#10b981" },
   exploreText: { color: "#ffffff", fontSize: 12, fontWeight: "900" },
   emptyBox: {
     marginTop: 55,

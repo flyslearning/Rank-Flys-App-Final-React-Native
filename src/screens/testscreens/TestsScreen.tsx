@@ -37,6 +37,31 @@ export default function TestsScreen({ route, navigation }: Props) {
   const [hasAccess, setHasAccess] = useState(false);
   const [isFree, setIsFree] = useState(false);
 
+  const normalizeIsDemo = (value: any) => {
+    return value === true || value === 1 || value === "true";
+  };
+
+  const normalizeTest = (item: any): TestItem => {
+    return {
+      ...item,
+      id: item.id,
+      series_id: item.series_id || seriesId,
+      title: item.title || "Untitled Test",
+      description: item.description || "",
+      duration_minutes: Number(item.duration_minutes || 0),
+      total_questions: Number(item.total_questions || 0),
+      is_demo: normalizeIsDemo(item.is_demo),
+    } as any;
+  };
+
+  const isDemoTest = (item: any) => {
+    return normalizeIsDemo(item?.is_demo);
+  };
+
+  const canStartTestItem = (item: any) => {
+    return hasAccess || isFree || isDemoTest(item);
+  };
+
   const loadTests = useCallback(async () => {
     try {
       const localAccess = getTestSeriesAccessLocal(seriesId);
@@ -44,7 +69,7 @@ export default function TestsScreen({ route, navigation }: Props) {
       setHasAccess(localAccess.has_access);
       setIsFree(localAccess.is_free);
 
-      const localTests = getTestsLocal(seriesId) as any[];
+      const localTests = (getTestsLocal(seriesId) as any[]).map(normalizeTest);
 
       if (localTests.length > 0) {
         setTests(localTests);
@@ -55,19 +80,22 @@ export default function TestsScreen({ route, navigation }: Props) {
 
       const res = await TestAPI.getTestsBySeries(seriesId);
 
-      const freshTests = res.data?.data || [];
-      const apiHasAccess = res.data?.has_access === true;
-      const apiIsFree = res.data?.is_free === true;
+      const freshTests = (res.data?.data || []).map(normalizeTest);
+
+      const apiHasAccess =
+        res.data?.has_access === true || res.data?.has_access === 1;
+
+      const apiIsFree =
+        res.data?.is_free === true || res.data?.is_free === 1;
 
       setHasAccess(apiHasAccess);
       setIsFree(apiIsFree);
 
-      saveTests(seriesId, freshTests);
+      saveTests(seriesId, freshTests as any);
       updateTestSeriesAccess(seriesId, apiHasAccess, apiIsFree);
       updateTestSeriesCount(seriesId, freshTests.length);
 
-      const updatedLocalTests = getTestsLocal(seriesId) as any[];
-      setTests(updatedLocalTests);
+      setTests(freshTests);
     } catch (error: any) {
       console.log("Tests error:", error.response?.data || error.message);
 
@@ -76,7 +104,7 @@ export default function TestsScreen({ route, navigation }: Props) {
       setHasAccess(localAccess.has_access);
       setIsFree(localAccess.is_free);
 
-      const localTests = getTestsLocal(seriesId) as any[];
+      const localTests = (getTestsLocal(seriesId) as any[]).map(normalizeTest);
 
       if (localTests.length > 0) {
         setTests(localTests);
@@ -96,102 +124,125 @@ export default function TestsScreen({ route, navigation }: Props) {
     const keyword = search.trim().toLowerCase();
     if (!keyword) return tests;
 
-    return tests.filter((item) => {
+    return tests.filter((item: any) => {
       const title = item.title?.toLowerCase() || "";
       const description = item.description?.toLowerCase() || "";
       return title.includes(keyword) || description.includes(keyword);
     });
   }, [tests, search]);
 
-  const canStartTest = hasAccess || isFree;
+  const renderTestCard = ({ item, index }: { item: TestItem; index: number }) => {
+    const isDemo = isDemoTest(item);
+    const canStart = canStartTestItem(item);
 
-  const renderTestCard = ({ item, index }: { item: TestItem; index: number }) => (
-    <View style={styles.card}>
-      <View style={styles.cardGlow} />
+    return (
+      <View style={styles.card}>
+        <View style={styles.cardGlow} />
 
-      <View style={styles.cardTop}>
-        <View style={styles.numberBox}>
-          <Text style={styles.numberText}>{String(index + 1).padStart(2, "0")}</Text>
+        <View style={styles.cardTop}>
+          <View style={[styles.numberBox, isDemo && styles.demoNumberBox]}>
+            <Text style={styles.numberText}>
+              {String(index + 1).padStart(2, "0")}
+            </Text>
+          </View>
+
+          <View style={[styles.readyBadge, isDemo && styles.demoBadge]}>
+            <Ionicons
+              name={isDemo ? "gift-outline" : canStart ? "checkmark-circle" : "lock-closed"}
+              size={14}
+              color={isDemo ? "#047857" : canStart ? "#16a34a" : "#64748b"}
+            />
+
+            <Text style={[styles.readyText, isDemo && styles.demoText]}>
+              {isDemo ? "FREE DEMO" : canStart ? "READY" : "LOCKED"}
+            </Text>
+          </View>
         </View>
 
-        <View style={styles.readyBadge}>
-          <Ionicons name="checkmark-circle" size={14} color="#16a34a" />
-          <Text style={styles.readyText}>READY</Text>
+        <Text style={styles.cardTitle} numberOfLines={2}>
+          {item.title}
+        </Text>
+
+        <Text style={styles.cardDescription} numberOfLines={2}>
+          {item.description || "Start practicing with exam-level questions."}
+        </Text>
+
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <View style={styles.statIconBox}>
+              <Ionicons name="time-outline" size={18} color="#2563eb" />
+            </View>
+            <View>
+              <Text style={styles.statValue}>{item.duration_minutes} min</Text>
+              <Text style={styles.statLabel}>Duration</Text>
+            </View>
+          </View>
+
+          <View style={styles.statBox}>
+            <View style={styles.statIconBox}>
+              <Ionicons name="help-circle-outline" size={18} color="#2563eb" />
+            </View>
+            <View>
+              <Text style={styles.statValue}>{item.total_questions}</Text>
+              <Text style={styles.statLabel}>Questions</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.footerRow}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.secondaryBtn}
+            onPress={() => navigation.navigate("Attempts", { testId: item.id })}
+          >
+            <Ionicons name="document-text-outline" size={16} color="#334155" />
+            <Text style={styles.secondaryText}>Attempts</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.9}
+            style={[
+              styles.primaryBtn,
+              !canStart && styles.primaryBtnLocked,
+              isDemo && !hasAccess && !isFree && styles.demoPrimaryBtn,
+            ]}
+            onPress={() => {
+              if (!canStart) {
+                Alert.alert(
+                  "Locked",
+                  "Please purchase this test series to start the test."
+                );
+                return;
+              }
+
+              navigation.navigate("TestAttempt", {
+                testId: item.id,
+                seriesId: seriesId,
+                duration_minutes: item.duration_minutes,
+                total_questions: item.total_questions,
+                title: item.title,
+                description: item.description,
+              } as any);
+            }}
+          >
+            <Text style={styles.primaryText}>
+              {!canStart
+                ? "Locked"
+                : isDemo && !hasAccess && !isFree
+                ? "Start Demo"
+                : "Start Test"}
+            </Text>
+
+            <Ionicons
+              name={!canStart ? "lock-closed" : "arrow-forward-circle"}
+              size={20}
+              color="#ffffff"
+            />
+          </TouchableOpacity>
         </View>
       </View>
-
-      <Text style={styles.cardTitle} numberOfLines={2}>
-        {item.title}
-      </Text>
-
-      <Text style={styles.cardDescription} numberOfLines={2}>
-        {item.description || "Start practicing with exam-level questions."}
-      </Text>
-
-      <View style={styles.statsRow}>
-        <View style={styles.statBox}>
-          <View style={styles.statIconBox}>
-            <Ionicons name="time-outline" size={18} color="#2563eb" />
-          </View>
-          <View>
-            <Text style={styles.statValue}>{item.duration_minutes} min</Text>
-            <Text style={styles.statLabel}>Duration</Text>
-          </View>
-        </View>
-
-        <View style={styles.statBox}>
-          <View style={styles.statIconBox}>
-            <Ionicons name="help-circle-outline" size={18} color="#2563eb" />
-          </View>
-          <View>
-            <Text style={styles.statValue}>{item.total_questions}</Text>
-            <Text style={styles.statLabel}>Questions</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.footerRow}>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.secondaryBtn}
-          onPress={() => navigation.navigate("Attempts", { testId: item.id })}
-        >
-          <Ionicons name="document-text-outline" size={16} color="#334155" />
-          <Text style={styles.secondaryText}>Attempts</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          activeOpacity={0.9}
-          style={[styles.primaryBtn, !canStartTest && styles.primaryBtnLocked]}
-          onPress={() => {
-            if (!canStartTest) {
-              Alert.alert("Locked", "Please purchase this test series to start the test.");
-              return;
-            }
-
-            navigation.navigate("TestAttempt", {
-              testId: item.id,
-              seriesId: seriesId,
-              duration_minutes: item.duration_minutes,
-              total_questions: item.total_questions,
-              title: item.title,
-              description: item.description,
-            } as any);
-          }}
-        >
-          <Text style={styles.primaryText}>
-            {canStartTest ? "Start Test" : "Locked"}
-          </Text>
-
-          <Ionicons
-            name={canStartTest ? "arrow-forward-circle" : "lock-closed"}
-            size={20}
-            color="#ffffff"
-          />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -223,7 +274,10 @@ export default function TestsScreen({ route, navigation }: Props) {
             />
 
             {search.length > 0 && (
-              <TouchableOpacity onPress={() => setSearch("")} style={styles.clearBtn}>
+              <TouchableOpacity
+                onPress={() => setSearch("")}
+                style={styles.clearBtn}
+              >
                 <Ionicons name="close" size={18} color="#64748b" />
               </TouchableOpacity>
             )}
@@ -387,6 +441,11 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
 
+  demoNumberBox: {
+    backgroundColor: "#10b981",
+    shadowColor: "#10b981",
+  },
+
   numberText: {
     color: "#ffffff",
     fontSize: 16,
@@ -405,10 +464,19 @@ const styles = StyleSheet.create({
     gap: 5,
   },
 
+  demoBadge: {
+    backgroundColor: "#d1fae5",
+    borderColor: "#86efac",
+  },
+
   readyText: {
     fontSize: 11,
     fontWeight: "900",
     color: "#15803d",
+  },
+
+  demoText: {
+    color: "#047857",
   },
 
   cardTitle: {
@@ -505,6 +573,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.23,
     shadowRadius: 14,
     elevation: 5,
+  },
+
+  demoPrimaryBtn: {
+    backgroundColor: "#10b981",
+    shadowColor: "#10b981",
   },
 
   primaryBtnLocked: {
