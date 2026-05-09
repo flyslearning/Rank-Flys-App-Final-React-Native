@@ -35,7 +35,6 @@ import ProfileScreen from "../screens/ProfileScreen";
 import ToolPage from "../screens/extrascreens/ToolPage"
 import Scholarship from "../screens/scholarshipscreens/ScholarshipScreens"
 import Mentorship from "../screens/mentorshipscreens/MentorshipScreens"
-import MentorshipSessionScreen from "../screens/mentorshipscreens/MentorshipSessionScreen"
 import MentorshipScreens from "../screens/mentorshipscreens/MentorshipSeries"
 import ExploreScholarshipScreen from "../screens/scholarshipscreens/Explorescholarship"
 import MyMentor from "../screens/mentorshipscreens/MyMentor"
@@ -230,11 +229,6 @@ export default function RootNavigator() {
             name="My Mentor"
             component={MyMentor}
             options={{ headerShown: true }}
-          />
-          <Stack.Screen
-            name="MentorshipSessionScreen"
-            component={MentorshipSessionScreen}
-            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="Contact Us"

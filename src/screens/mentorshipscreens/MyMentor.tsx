@@ -32,9 +32,6 @@ const BG = "#f8fafc";
 
 type TabType = "home" | "ebooks" | "tests" | "sessions" | "announcements";
 
-// Backend me agar "2026-05-10T19:00:00Z" ka matlab actual 7 PM IST hai,
-// to true rakho. Agar backend actual UTC bhej raha hai aur convert chahiye,
-// to false kar dena.
 const TREAT_API_TIME_AS_IST_WALL_TIME = true;
 
 const normalizeBool = (v: any) => v === true || v === 1 || v === "true";
@@ -75,16 +72,14 @@ const formatDateTime = (value?: string) => {
 
   if (Number.isNaN(d.getTime())) return "";
 
-  return (
-    d.toLocaleString("en-IN", {
-      timeZone: TREAT_API_TIME_AS_IST_WALL_TIME ? undefined : "Asia/Kolkata",
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }) 
-  );
+  return d.toLocaleString("en-IN", {
+    timeZone: TREAT_API_TIME_AS_IST_WALL_TIME ? undefined : "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 };
 
 const buildTreeList = (nodes: any[]) => {
@@ -395,7 +390,6 @@ export default function MyMentor() {
           getArray(sessionsRes)
         );
 
-        // API call successful hote hi local DB overwrite
         await saveLocal(parsed);
         applyParsedData(parsed);
       } catch (error: any) {
@@ -487,6 +481,21 @@ export default function MyMentor() {
     }
 
     Linking.openURL(url);
+  };
+
+  const openSessionUrl = async (session: any, type: "meet" | "recording") => {
+    if (!hasAccess) {
+      Alert.alert(
+        "Locked",
+        type === "meet"
+          ? "Live session join karne ke liye mentorship buy karo."
+          : "Recording dekhne ke liye mentorship buy karo."
+      );
+      return;
+    }
+
+    const url = type === "meet" ? session?.meet_link : session?.recording_url;
+    await openUrl(url);
   };
 
   const openEbookNode = (node: any) => {
@@ -646,11 +655,7 @@ export default function MyMentor() {
         </View>
 
         <View style={styles.tabsOuter}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tabsWrap}
-          >
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsWrap}>
             {renderTab("home", "Home", "home-outline", ebookSeries.length + tests.length)}
             {renderTab("ebooks", "Ebooks", "book-outline", ebookNodes.length)}
             {renderTab("tests", "Tests", "document-text-outline", tests.length)}
@@ -678,11 +683,7 @@ export default function MyMentor() {
                   )}
 
                   <View style={[styles.accessBadge, hasAccess ? styles.accessOk : styles.accessLocked]}>
-                    <Ionicons
-                      name={hasAccess ? "checkmark-circle" : "lock-closed"}
-                      size={15}
-                      color="#fff"
-                    />
+                    <Ionicons name={hasAccess ? "checkmark-circle" : "lock-closed"} size={15} color="#fff" />
                     <Text style={styles.accessBadgeText}>{hasAccess ? "UNLOCKED" : "LOCKED"}</Text>
                   </View>
                 </View>
@@ -779,7 +780,9 @@ export default function MyMentor() {
               <View style={styles.sectionHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.sectionTitleNoMargin}>Ebooks</Text>
-                  <Text style={styles.sectionSub}>{folderCount} folders • {fileCount} files</Text>
+                  <Text style={styles.sectionSub}>
+                    {folderCount} folders • {fileCount} files
+                  </Text>
                 </View>
                 <Text style={styles.countPill}>{filteredEbookNodes.length}</Text>
               </View>
@@ -808,11 +811,7 @@ export default function MyMentor() {
                         <View
                           style={[
                             styles.listIconBox,
-                            !unlocked
-                              ? styles.lockIconBox
-                              : isFolder
-                              ? styles.folderIconBox
-                              : styles.fileIconBox,
+                            !unlocked ? styles.lockIconBox : isFolder ? styles.folderIconBox : styles.fileIconBox,
                           ]}
                         >
                           <Ionicons
@@ -913,9 +912,7 @@ export default function MyMentor() {
                             style={[styles.primaryBtn, !unlocked && styles.lockedStartBtn]}
                             onPress={() => startTest(test)}
                           >
-                            <Text style={styles.primaryBtnText}>
-                              {unlocked ? "Start Test" : "Locked"}
-                            </Text>
+                            <Text style={styles.primaryBtnText}>{unlocked ? "Start Test" : "Locked"}</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -942,56 +939,100 @@ export default function MyMentor() {
                   <Text style={styles.emptyTitle}>No sessions found</Text>
                 </View>
               ) : (
-                filteredSessions.map((session, index) => (
-                  <FadeCard key={session.id} delay={index * 25}>
-                    <View style={styles.sessionCard}>
-                      <View style={styles.cardTopRow}>
-                        <View
-                          style={[
-                            styles.listIconBox,
-                            session.is_live ? styles.liveIconBox : styles.sessionIconBox,
-                          ]}
-                        >
-                          <Ionicons
-                            name={session.is_live ? "radio-outline" : "videocam-outline"}
-                            size={25}
-                            color={session.is_live ? RED : GREEN}
-                          />
-                        </View>
+                filteredSessions.map((session, index) => {
+                  const unlocked = hasAccess;
 
-                        <View style={styles.rowBody}>
-                          {session.is_live && (
-                            <View style={styles.livePill}>
-                              <Text style={styles.livePillText}>LIVE</Text>
+                  return (
+                    <FadeCard key={session.id} delay={index * 25}>
+                      <View style={[styles.sessionCard, !unlocked && styles.lockedSessionCard]}>
+                        <View style={styles.cardTopRow}>
+                          <View
+                            style={[
+                              styles.listIconBox,
+                              !unlocked
+                                ? styles.lockIconBox
+                                : session.is_live
+                                ? styles.liveIconBox
+                                : styles.sessionIconBox,
+                            ]}
+                          >
+                            <Ionicons
+                              name={
+                                !unlocked
+                                  ? "lock-closed-outline"
+                                  : session.is_live
+                                  ? "radio-outline"
+                                  : "videocam-outline"
+                              }
+                              size={25}
+                              color={!unlocked ? ORANGE : session.is_live ? RED : GREEN}
+                            />
+                          </View>
+
+                          <View style={styles.rowBody}>
+                            <View style={styles.sessionTopLine}>
+                              {session.is_live && unlocked ? (
+                                <View style={styles.livePill}>
+                                  <Text style={styles.livePillText}>LIVE</Text>
+                                </View>
+                              ) : null}
+
+                              {!unlocked ? (
+                                <View style={styles.lockPill}>
+                                  <Ionicons name="lock-closed" size={11} color={ORANGE} />
+                                  <Text style={styles.lockPillText}>LOCKED</Text>
+                                </View>
+                              ) : null}
                             </View>
-                          )}
 
-                          <Text style={styles.rowTitle} numberOfLines={2}>
-                            {session.title}
-                          </Text>
-                          <Text style={styles.rowSub} numberOfLines={2}>
-                            {session.description}
-                          </Text>
-                          <Text style={styles.timeText}>
-                            {formatDateTime(session.start_time)} - {formatDateTime(session.end_time)}
-                          </Text>
+                            <Text style={styles.rowTitle} numberOfLines={2}>
+                              {session.title}
+                            </Text>
+
+                            <Text style={styles.rowSub} numberOfLines={2}>
+                              {session.description}
+                            </Text>
+
+                            <View style={[styles.sessionTimeBox, !unlocked && styles.lockedTimeBox]}>
+                              <Ionicons name="time-outline" size={16} color={unlocked ? GREEN : ORANGE} />
+                              <Text style={[styles.sessionTimeText, !unlocked && styles.lockedTimeText]}>
+                                {formatDateTime(session.start_time)} - {formatDateTime(session.end_time)}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+
+                        <View style={styles.actionRow}>
+                          <TouchableOpacity
+                            style={[styles.primaryBtn, !unlocked && styles.lockedStartBtn]}
+                            onPress={() => openSessionUrl(session, "meet")}
+                          >
+                            <Ionicons
+                              name={unlocked ? "enter-outline" : "lock-closed-outline"}
+                              size={16}
+                              color="#fff"
+                            />
+                            <Text style={styles.primaryBtnText}>{unlocked ? "Join Meet" : "Locked"}</Text>
+                          </TouchableOpacity>
+
+                          <TouchableOpacity
+                            style={[styles.secondaryBtn, !unlocked && styles.lockedSecondaryBtn]}
+                            onPress={() => openSessionUrl(session, "recording")}
+                          >
+                            <Ionicons
+                              name={unlocked ? "play-circle-outline" : "lock-closed-outline"}
+                              size={16}
+                              color={unlocked ? "#334155" : ORANGE}
+                            />
+                            <Text style={[styles.secondaryBtnText, !unlocked && styles.lockedSecondaryBtnText]}>
+                              Recording
+                            </Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
-
-                      <View style={styles.actionRow}>
-                        <TouchableOpacity style={styles.primaryBtn} onPress={() => openUrl(session.meet_link)}>
-                          <Ionicons name="enter-outline" size={16} color="#fff" />
-                          <Text style={styles.primaryBtnText}>Join Meet</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.secondaryBtn} onPress={() => openUrl(session.recording_url)}>
-                          <Ionicons name="play-circle-outline" size={16} color="#334155" />
-                          <Text style={styles.secondaryBtnText}>Recording</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  </FadeCard>
-                ))
+                    </FadeCard>
+                  );
+                })
               )}
             </View>
           )}
@@ -1016,11 +1057,7 @@ export default function MyMentor() {
                   <FadeCard key={item.id} delay={index * 25}>
                     <View style={[styles.announcementCard, item.is_pinned && styles.pinnedCard]}>
                       {item.image_url ? (
-                        <Image
-                          source={{ uri: item.image_url }}
-                          style={styles.announcementImage}
-                          resizeMode="cover"
-                        />
+                        <Image source={{ uri: item.image_url }} style={styles.announcementImage} resizeMode="cover" />
                       ) : null}
 
                       <View style={styles.announcementBody}>
@@ -1077,15 +1114,15 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 10, color: "#64748b", fontWeight: "800" },
 
   topHeader: {
-  backgroundColor: "#faf5ff",
-  paddingHorizontal: 16,
-  paddingTop: Platform.OS === "android" ? 10 : 8,
-  paddingBottom: 5,
-  borderBottomLeftRadius: 18,
-  borderBottomRightRadius: 18,
-  borderWidth: 1,
-  borderColor: "#f3e8ff",
-},
+    backgroundColor: "#faf5ff",
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === "android" ? 10 : 8,
+    paddingBottom: 5,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
+    borderWidth: 1,
+    borderColor: "#f3e8ff",
+  },
   titleRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1103,17 +1140,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 1,
   },
-  headerLabel: {
-    color: PURPLE_DARK,
-    fontSize: 11,
-    fontWeight: "900",
-  },
-  headerTitle: {
-    color: DARK,
-    fontSize: 18,
-    fontWeight: "900",
-    marginTop: 0,
-  },
+  headerLabel: { color: PURPLE_DARK, fontSize: 11, fontWeight: "900" },
+  headerTitle: { color: DARK, fontSize: 18, fontWeight: "900", marginTop: 0 },
   headerDescription: {
     color: "#64748b",
     fontSize: 12,
@@ -1160,21 +1188,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 999,
   },
-  shortcutText: {
-    color: "#64748b",
-    fontSize: 10,
-    fontWeight: "900",
-  },
+  shortcutText: { color: "#64748b", fontSize: 10, fontWeight: "900" },
 
-  tabsOuter: {
-    height: 60,
-    justifyContent: "center",
-  },
-  tabsWrap: {
-    paddingHorizontal: 16,
-    gap: 8,
-    alignItems: "center",
-  },
+  tabsOuter: { height: 60, justifyContent: "center" },
+  tabsWrap: { paddingHorizontal: 16, gap: 8, alignItems: "center" },
   tabBtn: {
     height: 40,
     minWidth: 102,
@@ -1189,16 +1206,8 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
   },
-  activeTabBtn: {
-    backgroundColor: PURPLE,
-    borderColor: PURPLE,
-  },
-  tabText: {
-    color: PURPLE_DARK,
-    fontSize: 12,
-    fontWeight: "900",
-    maxWidth: 74,
-  },
+  activeTabBtn: { backgroundColor: PURPLE, borderColor: PURPLE },
+  tabText: { color: PURPLE_DARK, fontSize: 12, fontWeight: "900", maxWidth: 74 },
   activeTabText: { color: "#fff" },
   tabCount: {
     minWidth: 20,
@@ -1213,10 +1222,7 @@ const styles = StyleSheet.create({
   tabCountText: { color: PURPLE_DARK, fontSize: 10, fontWeight: "900" },
   activeTabCountText: { color: "#fff" },
 
-  scroll: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
-  },
+  scroll: { paddingHorizontal: 16, paddingBottom: 40 },
   heroCard: {
     backgroundColor: "#fff",
     borderRadius: 24,
@@ -1250,11 +1256,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: "600",
   },
-  statsRow: {
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 16,
-  },
+  statsRow: { flexDirection: "row", gap: 9, marginTop: 16 },
   statCard: {
     flex: 1,
     backgroundColor: "#f8fafc",
@@ -1316,16 +1318,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
-  rowBody: {
-    flex: 1,
-    minWidth: 0,
-  },
-  rowTitle: {
-    color: DARK,
-    fontSize: 15,
-    lineHeight: 21,
-    fontWeight: "900",
-  },
+  rowBody: { flex: 1, minWidth: 0 },
+  rowTitle: { color: DARK, fontSize: 15, lineHeight: 21, fontWeight: "900" },
   rowSub: {
     marginTop: 3,
     color: "#64748b",
@@ -1398,6 +1392,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#d1fae5",
   },
+  lockedSessionCard: {
+    borderColor: "#fed7aa",
+    backgroundColor: "#fffaf5",
+  },
   announcementCard: {
     backgroundColor: "#fff",
     borderRadius: 20,
@@ -1407,23 +1405,56 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   pinnedCard: { borderColor: "#fed7aa", backgroundColor: "#fffaf5" },
-  cardTopRow: {
+  cardTopRow: { flexDirection: "row", alignItems: "flex-start" },
+
+  sessionTopLine: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
+    gap: 7,
+    marginBottom: 5,
   },
+  lockPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#ffedd5",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  lockPillText: { color: ORANGE, fontSize: 10, fontWeight: "900" },
+  sessionTimeBox: {
+    marginTop: 9,
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#ecfdf5",
+    borderWidth: 1,
+    borderColor: "#bbf7d0",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  lockedTimeBox: {
+    backgroundColor: "#fff7ed",
+    borderColor: "#fed7aa",
+  },
+  sessionTimeText: {
+    color: "#166534",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  lockedTimeText: { color: ORANGE },
 
   announcementImage: {
     width: "100%",
     aspectRatio: 16 / 9,
     backgroundColor: "#f1f5f9",
   },
-  announcementBody: {
-    padding: 14,
-  },
-  announcementTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-  },
+  announcementBody: { padding: 14 },
+  announcementTop: { flexDirection: "row", alignItems: "flex-start" },
   announcementIcon: {
     width: 44,
     height: 44,
@@ -1440,12 +1471,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  metaRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 13,
-  },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 13 },
   metaChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -1457,11 +1483,7 @@ const styles = StyleSheet.create({
   },
   metaChipText: { color: "#475569", fontSize: 12, fontWeight: "900" },
 
-  actionRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 14,
-  },
+  actionRow: { flexDirection: "row", gap: 10, marginTop: 14 },
   secondaryBtn: {
     flex: 1,
     minHeight: 43,
@@ -1485,7 +1507,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   lockedStartBtn: { backgroundColor: ORANGE },
+  lockedSecondaryBtn: {
+    backgroundColor: "#fff7ed",
+    borderWidth: 1,
+    borderColor: "#fed7aa",
+  },
   secondaryBtnText: { color: "#334155", fontSize: 13, fontWeight: "900" },
+  lockedSecondaryBtnText: { color: ORANGE },
   primaryBtnText: { color: "#fff", fontSize: 13, fontWeight: "900" },
 
   pinPill: {
@@ -1507,12 +1535,7 @@ const styles = StyleSheet.create({
   },
   livePillText: { color: RED, fontSize: 10, fontWeight: "900" },
   timeText: { color: "#475569", fontSize: 12, fontWeight: "800" },
-  dateRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
+  dateRow: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 5 },
 
   emptyBox: {
     backgroundColor: "#fff",
