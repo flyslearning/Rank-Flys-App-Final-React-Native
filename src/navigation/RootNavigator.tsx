@@ -38,6 +38,7 @@ import Mentorship from "../screens/mentorshipscreens/MentorshipScreens"
 import MentorshipScreens from "../screens/mentorshipscreens/MentorshipSeries"
 import ExploreScholarshipScreen from "../screens/scholarshipscreens/Explorescholarship"
 import MyMentor from "../screens/mentorshipscreens/MyMentor"
+import CheckoutScreen from "../screens/checkout/CheckoutScreen";
 import Contact from "../screens/extrascreens/Contact"
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -234,6 +235,14 @@ export default function RootNavigator() {
             name="Contact Us"
             component={Contact}
             options={{ headerShown: true }}
+          />
+           <Stack.Screen
+            name="CheckoutScreen"
+            component={CheckoutScreen}
+            options={{
+              headerShown: false,
+              animation: "slide_from_right",
+            }}
           />
            </>
           

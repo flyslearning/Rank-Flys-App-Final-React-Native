@@ -17,7 +17,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, TestSeries } from "../../types";
 import { TestAPI } from "../../api/test.api";
-import { startPayment } from "../../utils/payment";
 import {
   getTestSeriesLocal,
   saveTestSeries,
@@ -30,9 +29,51 @@ type SeriesWithCount = TestSeries & {
   testsCount?: number;
   price?: number;
   price_paise?: number;
+  original_price_paise?: number;
+  discount_price_paise?: number;
+  discount_percent?: number;
   is_free?: boolean;
   has_access?: boolean;
   created_at?: string;
+  image_url?: any;
+};
+
+const normalizeBool = (v: any) => v === true || v === 1 || v === "true";
+
+const formatRupeesFromPaise = (paise: number) => {
+  return `₹${Math.round(Number(paise || 0) / 100)}`;
+};
+
+const getOriginalPricePaise = (item: any) => {
+  return Number(
+    item?.original_price_paise ||
+      item?.price_paise ||
+      item?.discount_price_paise ||
+      0
+  );
+};
+
+const getDiscountPricePaise = (item: any) => {
+  return Number(
+    item?.discount_price_paise ||
+      item?.price_paise ||
+      item?.original_price_paise ||
+      0
+  );
+};
+
+const getDiscountPercent = (item: any) => {
+  const apiPercent = Number(item?.discount_percent || 0);
+  if (apiPercent > 0) return apiPercent;
+
+  const original = getOriginalPricePaise(item);
+  const discounted = getDiscountPricePaise(item);
+
+  if (original > 0 && discounted > 0 && discounted < original) {
+    return Math.round(((original - discounted) / original) * 100);
+  }
+
+  return 0;
 };
 
 export default function TestSeriesScreen({ navigation }: Props) {
@@ -60,62 +101,62 @@ export default function TestSeriesScreen({ navigation }: Props) {
   };
 
   const loadSeries = useCallback(async () => {
-  try {
-    const localData = getTestSeriesLocal() as SeriesWithCount[];
+    try {
+      const localData = getTestSeriesLocal() as SeriesWithCount[];
 
-    if (localData.length > 0) {
-      setSeries(localData);
+      if (localData.length > 0) {
+        setSeries(localData);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
+      const res = await TestAPI.getTestSeries();
+      const seriesList = res.data?.data || [];
+
+      const sortedSeries = [...seriesList].sort(
+        (a: any, b: any) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      const seriesWithCounts = await Promise.all(
+        sortedSeries.map(async (item: SeriesWithCount) => {
+          const testsCount = await getSeriesTestsCount(item.id);
+
+          return {
+            ...item,
+            testsCount,
+          };
+        })
+      );
+
+      saveTestSeries(seriesWithCounts);
+
+      for (const item of seriesWithCounts) {
+        updateTestSeriesCount(item.id, item.testsCount || 0);
+      }
+
+      const updatedLocalData = getTestSeriesLocal() as SeriesWithCount[];
+      setSeries(updatedLocalData);
+    } catch (error: any) {
+      console.log("Test series not found:", error.response?.data || error.message);
+
+      const localData = getTestSeriesLocal() as SeriesWithCount[];
+
+      if (localData.length > 0) {
+        setSeries(localData);
+      } else {
+        setAlertData({
+          title: "Not Found 😢",
+          message: "Test series not found",
+        });
+
+        setAlertVisible(true);
+      }
+    } finally {
       setLoading(false);
-    } else {
-      setLoading(true);
     }
-
-    const res = await TestAPI.getTestSeries();
-    const seriesList = res.data?.data || [];
-
-    const sortedSeries = [...seriesList].sort(
-      (a: any, b: any) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-
-    const seriesWithCounts = await Promise.all(
-      sortedSeries.map(async (item: SeriesWithCount) => {
-        const testsCount = await getSeriesTestsCount(item.id);
-
-        return {
-          ...item,
-          testsCount,
-        };
-      })
-    );
-
-    saveTestSeries(seriesWithCounts);
-
-    for (const item of seriesWithCounts) {
-      updateTestSeriesCount(item.id, item.testsCount || 0);
-    }
-
-    const updatedLocalData = getTestSeriesLocal() as SeriesWithCount[];
-    setSeries(updatedLocalData);
-  } catch (error: any) {
-    console.log("Test series not found:", error.response?.data || error.message);
-
-    const localData = getTestSeriesLocal() as SeriesWithCount[];
-
-    if (localData.length > 0) {
-      setSeries(localData);
-    } else {
-setAlertData({
-  title: "Not Found 😢",
-  message: "Test series not found",
-});
-
-setAlertVisible(true);
-    }
-  } finally {
-    setLoading(false);
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
     loadSeries();
@@ -137,29 +178,74 @@ setAlertVisible(true);
   };
 
   const buySeries = (item: SeriesWithCount) => {
-    startPayment({
-      contentId: item.id,
-      contentType: "test_series",
-      title: item.title,
-      onSuccess: loadSeries,
+    navigation.navigate("CheckoutScreen", {
+      item,
+      content_id: item.id,
+      content_type: "test_series",
     });
   };
 
   const getPrice = (item: SeriesWithCount) => {
-    if (item.is_free) return "FREE";
+    if (normalizeBool(item.is_free)) return "FREE";
+
+    const discountPricePaise = getDiscountPricePaise(item);
+
+    if (discountPricePaise > 0) {
+      return formatRupeesFromPaise(discountPricePaise);
+    }
+
     if (typeof item.price === "number") return `₹${item.price}`;
-    return `₹${(item.price_paise || 0) / 100}`;
+
+    return `₹${Math.round((item.price_paise || 0) / 100)}`;
+  };
+
+  const renderPriceBlock = (item: SeriesWithCount) => {
+    const isFree = normalizeBool(item.is_free);
+    const hasAccess = normalizeBool(item.has_access);
+
+    if (isFree) return <Text style={styles.priceValue}>FREE</Text>;
+    if (hasAccess) return <Text style={styles.priceValue}>Unlocked</Text>;
+
+    const originalPricePaise = getOriginalPricePaise(item);
+    const discountPricePaise = getDiscountPricePaise(item);
+    const discountPercent = getDiscountPercent(item);
+
+    const hasDiscount =
+      originalPricePaise > 0 &&
+      discountPricePaise > 0 &&
+      discountPricePaise < originalPricePaise;
+
+    return (
+      <View>
+        <View style={styles.priceLine}>
+          <Text style={styles.priceValue}>{getPrice(item)}</Text>
+
+          {hasDiscount && (
+            <Text style={styles.cutPrice}>
+              {formatRupeesFromPaise(originalPricePaise)}
+            </Text>
+          )}
+        </View>
+
+        {hasDiscount && discountPercent > 0 && (
+          <Text style={styles.offText}>{discountPercent}% OFF</Text>
+        )}
+      </View>
+    );
   };
 
   const renderCard = ({ item }: { item: SeriesWithCount }) => {
     const imageUrl =
       item.image_url?.Valid && item.image_url?.String
         ? item.image_url.String
+        : typeof item.image_url === "string"
+        ? item.image_url
         : "";
 
-    const isFree = item.is_free;
-    const hasAccess = item.has_access;
+    const isFree = normalizeBool(item.is_free);
+    const hasAccess = normalizeBool(item.has_access);
     const isLockedPaid = !isFree && !hasAccess;
+    const discountPercent = getDiscountPercent(item);
 
     return (
       <TouchableOpacity
@@ -196,6 +282,12 @@ setAlertVisible(true);
             </Text>
           </View>
 
+          {isLockedPaid && discountPercent > 0 && (
+            <View style={styles.discountBadge}>
+              <Text style={styles.discountBadgeText}>{discountPercent}% OFF</Text>
+            </View>
+          )}
+
           <View style={styles.testBadge}>
             <Ionicons name="layers-outline" size={14} color="#ffffff" />
             <Text style={styles.testBadgeText}>{item.testsCount || 0} Tests</Text>
@@ -230,13 +322,12 @@ setAlertVisible(true);
           </View>
 
           <View style={styles.priceBox}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.priceLabel}>
-                {isFree ? "Access Type" : hasAccess ? "Access Status" : "Series Price"}
+                {isFree ? "Access Type" : hasAccess ? "Access Status" : "Offer Price"}
               </Text>
-              <Text style={styles.priceValue}>
-                {isFree ? "FREE" : hasAccess ? "Unlocked" : getPrice(item)}
-              </Text>
+
+              {renderPriceBlock(item)}
             </View>
 
             <View style={styles.priceIconWrap}>
@@ -294,12 +385,13 @@ setAlertVisible(true);
 
       <View style={styles.container}>
         <View style={styles.header}>
-            <CustomAlert
-        visible={alertVisible}
-        title={alertData.title}
-        message={alertData.message}
-        onClose={() => setAlertVisible(false)}
-      />
+          <CustomAlert
+            visible={alertVisible}
+            title={alertData.title}
+            message={alertData.message}
+            onClose={() => setAlertVisible(false)}
+          />
+
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={22} color="#64748b" />
 
@@ -331,9 +423,7 @@ setAlertVisible(true);
           ListHeaderComponent={
             <View style={styles.resultRow}>
               <Text style={styles.resultTitle}>Available Test Series</Text>
-              <Text style={styles.resultCount}>
-                {filteredSeries.length} found
-              </Text>
+              <Text style={styles.resultCount}>{filteredSeries.length} found</Text>
             </View>
           }
           ListEmptyComponent={
@@ -350,14 +440,8 @@ setAlertVisible(true);
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
-  container: {
-    flex: 1,
-    backgroundColor: "#f8fafc",
-  },
+  safeArea: { flex: 1, backgroundColor: "#f8fafc" },
+  container: { flex: 1, backgroundColor: "#f8fafc" },
   header: {
     paddingHorizontal: 18,
     paddingTop: Platform.OS === "android" ? 18 : 10,
@@ -395,10 +479,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  listContent: {
-    paddingHorizontal: 18,
-    paddingBottom: 30,
-  },
+  listContent: { paddingHorizontal: 18, paddingBottom: 30 },
   resultRow: {
     marginTop: 8,
     marginBottom: 14,
@@ -437,11 +518,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#dbeafe",
     position: "relative",
   },
-  seriesImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
+  seriesImage: { width: "100%", height: "100%", resizeMode: "cover" },
   placeholderImage: {
     flex: 1,
     justifyContent: "center",
@@ -475,6 +552,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
+  discountBadge: {
+    position: "absolute",
+    right: 14,
+    top: 14,
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  discountBadgeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
   testBadge: {
     position: "absolute",
     right: 14,
@@ -492,9 +583,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-  cardBody: {
-    padding: 18,
-  },
+  cardBody: { padding: 18 },
   cardTitle: {
     fontSize: 21,
     lineHeight: 28,
@@ -540,16 +629,32 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  priceLabel: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#64748b",
+  priceLabel: { fontSize: 12, fontWeight: "800", color: "#64748b" },
+  priceLine: {
+    marginTop: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
   },
   priceValue: {
     marginTop: 3,
     fontSize: 21,
     fontWeight: "900",
     color: "#0f172a",
+  },
+  cutPrice: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#64748b",
+    textDecorationLine: "line-through",
+  },
+  offText: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#16a34a",
   },
   priceIconWrap: {
     width: 42,
@@ -558,6 +663,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
+    marginLeft: 12,
   },
   buttonRow: {
     marginTop: 16,
@@ -591,20 +697,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  fullExploreBtn: {
-    flex: 1,
-  },
+  fullExploreBtn: { flex: 1 },
   exploreText: {
     color: "#ffffff",
     fontSize: 13,
     fontWeight: "900",
     marginRight: 4,
   },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: {
     marginTop: 12,
     fontSize: 15,

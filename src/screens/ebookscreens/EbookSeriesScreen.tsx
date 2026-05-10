@@ -18,7 +18,6 @@ import CustomAlert from "../extrascreens/CustomAlert";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, EbookSeriesItem } from "../../types";
 import { EbookAPI } from "../../api/ebook.api";
-import { startPayment } from "../../utils/payment";
 import { EbookDb } from "../../db/ebookDb";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EbookSeries">;
@@ -27,9 +26,50 @@ type EbookSeriesWithCount = EbookSeriesItem & {
   filesCount?: number;
   price?: number;
   price_paise?: number;
+  original_price_paise?: number;
+  discount_price_paise?: number;
+  discount_percent?: number;
   is_free?: boolean;
   has_access?: boolean;
   image_url?: any;
+};
+
+const normalizeBool = (v: any) => v === true || v === 1 || v === "true";
+
+const getOriginalPricePaise = (item: any) => {
+  return Number(
+    item?.original_price_paise ||
+      item?.price_paise ||
+      item?.discount_price_paise ||
+      0
+  );
+};
+
+const getDiscountPricePaise = (item: any) => {
+  return Number(
+    item?.discount_price_paise ||
+      item?.price_paise ||
+      item?.original_price_paise ||
+      0
+  );
+};
+
+const getDiscountPercent = (item: any) => {
+  const apiPercent = Number(item?.discount_percent || 0);
+  if (apiPercent > 0) return apiPercent;
+
+  const original = getOriginalPricePaise(item);
+  const discounted = getDiscountPricePaise(item);
+
+  if (original > 0 && discounted > 0 && discounted < original) {
+    return Math.round(((original - discounted) / original) * 100);
+  }
+
+  return 0;
+};
+
+const formatRupeesFromPaise = (paise: number) => {
+  return `₹${Math.round(Number(paise || 0) / 100)}`;
 };
 
 export default function EbookSeriesScreen({ navigation }: Props) {
@@ -58,9 +98,17 @@ export default function EbookSeriesScreen({ navigation }: Props) {
   };
 
   const getPrice = (item: EbookSeriesWithCount) => {
-    if (item.is_free) return "FREE";
+    if (normalizeBool(item.is_free)) return "FREE";
+
+    const discountPricePaise = getDiscountPricePaise(item);
+
+    if (discountPricePaise > 0) {
+      return formatRupeesFromPaise(discountPricePaise);
+    }
+
     if (typeof item.price === "number") return `₹${item.price}`;
-    return `₹${(item.price_paise || 0) / 100}`;
+
+    return `₹${Math.round((item.price_paise || 0) / 100)}`;
   };
 
   const getEbookFilesCount = async (seriesId: string) => {
@@ -83,85 +131,85 @@ export default function EbookSeriesScreen({ navigation }: Props) {
   };
 
   const loadSeries = useCallback(async (showLoader = false) => {
-  try {
-    if (showLoader) setLoading(true);
+    try {
+      if (showLoader) setLoading(true);
 
-    const cached = EbookDb.getSeries();
+      const cached = EbookDb.getSeries();
 
-    if (cached.length > 0) {
-      setSeries(cached as any);
+      if (cached.length > 0) {
+        setSeries(cached as any);
+        setLoading(false);
+      }
+
+      const res = await EbookAPI.getSeries();
+
+      const seriesList = Array.isArray(res.data)
+        ? res.data
+        : res.data?.data || [];
+
+      const sortedSeries = [...seriesList].sort(
+        (a: any, b: any) =>
+          new Date(b.created_at || 0).getTime() -
+          new Date(a.created_at || 0).getTime()
+      );
+
+      const seriesWithCounts = await Promise.all(
+        sortedSeries.map(async (item: EbookSeriesWithCount) => {
+          const cachedNodes = EbookDb.getNodes(item.id, null);
+
+          let filesCount = cachedNodes.filter(
+            (node: any) => node.type === "file" || node.type === "pdf"
+          ).length;
+
+          try {
+            const nodeRes = await (EbookAPI as any).getNodes(item.id);
+            const nodes = nodeRes.data?.data || nodeRes.data || [];
+
+            EbookDb.saveNodes(item.id, null, nodes);
+
+            filesCount = nodes.filter((node: any) => {
+              return node.type === "file" || node.type === "pdf";
+            }).length;
+          } catch {}
+
+          return {
+            ...item,
+            filesCount,
+          };
+        })
+      );
+
+      EbookDb.saveSeries(seriesWithCounts);
+      setSeries(seriesWithCounts);
+    } catch (error: any) {
+      console.log("Ebook series not found:", error?.response?.data || error.message);
+
+      const cached = EbookDb.getSeries();
+
+      if (cached.length > 0) {
+        setSeries(cached as any);
+      } else {
+        setAlertData({
+          title: "Not Found 😢",
+          message: "Ebook series not found",
+        });
+
+        setAlertVisible(true);
+      }
+    } finally {
       setLoading(false);
     }
-
-    const res = await EbookAPI.getSeries();
-
-    const seriesList = Array.isArray(res.data)
-      ? res.data
-      : res.data?.data || [];
-
-    const sortedSeries = [...seriesList].sort(
-      (a: any, b: any) =>
-        new Date(b.created_at || 0).getTime() -
-        new Date(a.created_at || 0).getTime()
-    );
-
-    const seriesWithCounts = await Promise.all(
-      sortedSeries.map(async (item: EbookSeriesWithCount) => {
-        const cachedNodes = EbookDb.getNodes(item.id, null);
-
-        let filesCount = cachedNodes.filter(
-          (node: any) => node.type === "file" || node.type === "pdf"
-        ).length;
-
-        try {
-          const nodeRes = await (EbookAPI as any).getNodes(item.id);
-          const nodes = nodeRes.data?.data || nodeRes.data || [];
-
-          EbookDb.saveNodes(item.id, null, nodes);
-
-          filesCount = nodes.filter((node: any) => {
-            return node.type === "file" || node.type === "pdf";
-          }).length;
-        } catch {}
-
-        return {
-          ...item,
-          filesCount,
-        };
-      })
-    );
-
-    EbookDb.saveSeries(seriesWithCounts);
-    setSeries(seriesWithCounts);
-  } catch (error: any) {
-    console.log("Ebook series not found:", error?.response?.data || error.message);
-
-    const cached = EbookDb.getSeries();
-
-    if (cached.length > 0) {
-      setSeries(cached as any);
-    } else {
-     setAlertData({
-      title: "Not Found 😢",
-      message: "Ebook series not found",
-    });
-
-setAlertVisible(true);
-    }
-  } finally {
-    setLoading(false);
-  }
-}, []);
+  }, []);
 
   useEffect(() => {
-  loadSeries(true);
-}, [loadSeries]);
+    loadSeries(true);
+  }, [loadSeries]);
 
   const onRefresh = async () => {
-  setRefreshing(true);
-  await loadSeries(false);
-  setRefreshing(false);
-};
+    setRefreshing(true);
+    await loadSeries(false);
+    setRefreshing(false);
+  };
 
   const filteredSeries = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -190,20 +238,60 @@ setAlertVisible(true);
   };
 
   const buySeries = (item: EbookSeriesWithCount) => {
-    startPayment({
-      contentId: item.id,
-      contentType: "ebook_series",
-      title: item.title,
-      onSuccess: loadSeries,
+    navigation.navigate("CheckoutScreen", {
+      item,
+      content_id: item.id,
+      content_type: "ebook_series",
     });
+  };
+
+  const renderPriceBlock = (item: EbookSeriesWithCount) => {
+    const isFree = normalizeBool(item.is_free);
+    const hasAccess = normalizeBool(item.has_access);
+
+    if (isFree) {
+      return <Text style={styles.priceValue}>FREE</Text>;
+    }
+
+    if (hasAccess) {
+      return <Text style={styles.priceValue}>Unlocked</Text>;
+    }
+
+    const originalPricePaise = getOriginalPricePaise(item);
+    const discountPricePaise = getDiscountPricePaise(item);
+    const discountPercent = getDiscountPercent(item);
+
+    const hasDiscount =
+      originalPricePaise > 0 &&
+      discountPricePaise > 0 &&
+      discountPricePaise < originalPricePaise;
+
+    return (
+      <View>
+        <View style={styles.priceLine}>
+          <Text style={styles.priceValue}>{getPrice(item)}</Text>
+
+          {hasDiscount && (
+            <Text style={styles.cutPrice}>
+              {formatRupeesFromPaise(originalPricePaise)}
+            </Text>
+          )}
+        </View>
+
+        {hasDiscount && discountPercent > 0 && (
+          <Text style={styles.offText}>{discountPercent}% OFF</Text>
+        )}
+      </View>
+    );
   };
 
   const renderCard = ({ item }: { item: EbookSeriesWithCount }) => {
     const imageUrl = getImageUrl(item);
 
-    const isFree = item.is_free === true;
-    const hasAccess = item.has_access === true;
+    const isFree = normalizeBool(item.is_free);
+    const hasAccess = normalizeBool(item.has_access);
     const isLockedPaid = !isFree && !hasAccess;
+    const discountPercent = getDiscountPercent(item);
 
     return (
       <TouchableOpacity
@@ -243,6 +331,12 @@ setAlertVisible(true);
               {isFree ? "FREE" : hasAccess ? "UNLOCKED" : "PAID"}
             </Text>
           </View>
+
+          {isLockedPaid && discountPercent > 0 && (
+            <View style={styles.discountBadge}>
+              <Text style={styles.discountBadgeText}>{discountPercent}% OFF</Text>
+            </View>
+          )}
 
           <View style={styles.testBadge}>
             <Ionicons name="library-outline" size={14} color="#ffffff" />
@@ -286,13 +380,12 @@ setAlertVisible(true);
           </View>
 
           <View style={styles.priceBox}>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={styles.priceLabel}>
-                {isFree ? "Access Type" : hasAccess ? "Access Status" : "Series Price"}
+                {isFree ? "Access Type" : hasAccess ? "Access Status" : "Offer Price"}
               </Text>
-              <Text style={styles.priceValue}>
-                {isFree ? "FREE" : hasAccess ? "Unlocked" : getPrice(item)}
-              </Text>
+
+              {renderPriceBlock(item)}
             </View>
 
             <View style={styles.priceIconWrap}>
@@ -356,6 +449,7 @@ setAlertVisible(true);
             message={alertData.message}
             onClose={() => setAlertVisible(false)}
           />
+
           <View style={styles.searchBox}>
             <Ionicons name="search-outline" size={22} color="#64748b" />
 
@@ -531,6 +625,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
+  discountBadge: {
+    position: "absolute",
+    right: 14,
+    top: 14,
+    backgroundColor: "#dc2626",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  discountBadgeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "900",
+  },
   testBadge: {
     position: "absolute",
     right: 14,
@@ -600,11 +708,31 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#64748b",
   },
+  priceLine: {
+    marginTop: 3,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
   priceValue: {
     marginTop: 3,
     fontSize: 20,
     fontWeight: "900",
     color: "#2563eb",
+  },
+  cutPrice: {
+    marginTop: 4,
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#64748b",
+    textDecorationLine: "line-through",
+  },
+  offText: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "#16a34a",
   },
   priceIconWrap: {
     width: 42,
@@ -613,6 +741,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
+    marginLeft: 12,
   },
   buttonRow: {
     marginTop: 16,

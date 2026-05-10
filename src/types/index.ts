@@ -24,6 +24,12 @@ export type RootStackParamList = {
     title: string;
     fileUrl: string;
   };
+
+   CheckoutScreen: {
+    item: any;
+    content_id: string;
+    content_type: "ebook_series" | "test_series" | "mentorship_series";
+  };
 };
 
 export type UserProfile = {
@@ -56,6 +62,13 @@ export type TestSeries = {
   description?: string;
   image_url?: string;
   explore_text?: string;
+  price?: number;
+  price_paise?: number;
+  original_price_paise?: number;
+  discount_price_paise?: number;
+  discount_percent?: number;
+  is_free?: boolean;
+  has_access?: boolean;
 };
 
 export type TestItem = {
@@ -93,6 +106,9 @@ export type EbookSeriesItem = {
   is_free?: boolean;
   price?: number;
   price_paise?: number;
+  original_price_paise?: number;
+  discount_price_paise?: number;
+  discount_percent?: number;
 };
 
 export type EbookNode = {

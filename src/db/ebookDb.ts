@@ -10,6 +10,9 @@ export type CachedEbookSeries = {
   goal_class_id?: string | null;
   price?: number;
   price_paise?: number;
+  original_price_paise?: number;
+  discount_price_paise?: number;
+  discount_percent?: number;
   is_free?: boolean;
   has_access?: boolean;
   filesCount?: number;
@@ -64,33 +67,51 @@ export const EbookDb = {
       db.runSync(`DELETE FROM ebook_series`);
     }
 
-    const stmt = db.prepareSync(`
+        const stmt = db.prepareSync(`
       INSERT OR REPLACE INTO ebook_series
       (
-        id, title, description, explore_text, image_url, created_at,
-        goal_class_id, price, price_paise, has_access, is_free,
-        files_count, cached_at
+        id,
+        title,
+        description,
+        explore_text,
+        image_url,
+        created_at,
+        goal_class_id,
+        price,
+        price_paise,
+        original_price_paise,
+        discount_price_paise,
+        discount_percent,
+        has_access,
+        is_free,
+        files_count,
+        cached_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     try {
       items.forEach((item) => {
         stmt.executeSync([
-          item.id,
-          item.title || "",
-          item.description || "",
-          item.explore_text || "",
-          item.image_url || "",
-          item.created_at || "",
-          item.goal_class_id || "",
-          item.price || 0,
-          item.price_paise || 0,
-          item.has_access ? 1 : 0,
-          item.is_free ? 1 : 0,
-          item.filesCount || 0,
-          Date.now(),
-        ]);
+        item.id,
+        item.title || "",
+        item.description || "",
+        item.explore_text || "",
+        item.image_url || "",
+        item.created_at || "",
+        item.goal_class_id || "",
+        item.price || 0,
+        item.price_paise || 0,
+
+        item.original_price_paise || item.price_paise || 0,
+        item.discount_price_paise || item.price_paise || 0,
+        item.discount_percent || 0,
+
+        item.has_access ? 1 : 0,
+        item.is_free ? 1 : 0,
+        item.filesCount || 0,
+        Date.now(),
+      ]);
       });
     } finally {
       stmt.finalizeSync();
@@ -116,6 +137,9 @@ export const EbookDb = {
       goal_class_id: row.goal_class_id || "",
       price: Number(row.price || 0),
       price_paise: Number(row.price_paise || 0),
+      original_price_paise: Number(row.original_price_paise || row.price_paise || 0),
+      discount_price_paise: Number(row.discount_price_paise || row.price_paise || 0),
+      discount_percent: Number(row.discount_percent || 0),
       has_access: row.has_access === 1,
       is_free: row.is_free === 1,
       filesCount: Number(row.files_count || 0),

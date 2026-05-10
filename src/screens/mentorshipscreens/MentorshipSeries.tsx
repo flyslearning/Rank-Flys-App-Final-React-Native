@@ -20,7 +20,6 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 
 import { mentorshipApi } from "../../api/mentorship.api";
-import { startPayment } from "../../utils/payment";
 
 const PURPLE = "#7c3aed";
 const LAVENDER = "#f5f3ff";
@@ -30,6 +29,7 @@ const BG = "#f8fafc";
 const GREEN = "#16a34a";
 const ORANGE = "#f97316";
 const BLUE = "#2563eb";
+const RED = "#dc2626";
 
 const CACHE_KEY = "mentorship_listing_cache_v3";
 const CACHE_TIME_KEY = "mentorship_listing_cache_time_v3";
@@ -55,12 +55,51 @@ const hasPlanAccess = (item: any) => {
   );
 };
 
+const getOriginalPricePaise = (item: any) => {
+  return Number(
+    item?.original_price_paise ||
+      item?.price_paise ||
+      item?.discount_price_paise ||
+      0
+  );
+};
+
+const getDiscountPricePaise = (item: any) => {
+  return Number(
+    item?.discount_price_paise ||
+      item?.price_paise ||
+      item?.original_price_paise ||
+      0
+  );
+};
+
+const getDiscountPercent = (item: any) => {
+  const apiPercent = Number(item?.discount_percent || 0);
+  if (apiPercent > 0) return apiPercent;
+
+  const original = getOriginalPricePaise(item);
+  const discounted = getDiscountPricePaise(item);
+
+  if (original > 0 && discounted > 0 && discounted < original) {
+    return Math.round(((original - discounted) / original) * 100);
+  }
+
+  return 0;
+};
+
+const formatRupeesFromPaise = (paise: number) => {
+  return `₹${Math.round(Number(paise || 0) / 100)}`;
+};
+
 const getPriceText = (item: any) => {
   if (normalizeBool(item?.is_free)) return "FREE";
-  const rupees =
+
+  const discountPricePaise = getDiscountPricePaise(item);
+  const priceRupees =
     Number(item?.price_rupees || 0) ||
-    Math.round(Number(item?.price_paise || 0) / 100);
-  return rupees > 0 ? `₹${rupees}` : "₹0";
+    Math.round(Number(discountPricePaise || 0) / 100);
+
+  return priceRupees > 0 ? `₹${priceRupees}` : "₹0";
 };
 
 const getEbookCount = (item: any) => {
@@ -240,10 +279,6 @@ export default function MentorshipScreens() {
     return mentorships.filter((item) => hasPlanAccess(item));
   }, [mentorships]);
 
-  const premiumPlans = useMemo(() => {
-    return mentorships.filter((item) => !hasPlanAccess(item));
-  }, [mentorships]);
-
   const visiblePlans = useMemo(() => {
     const base = activeTab === "my" ? myPlans : mentorships;
     const keyword = search.trim().toLowerCase();
@@ -263,18 +298,12 @@ export default function MentorshipScreens() {
     });
   };
 
-  const buyMentorship = async (item: any) => {
-    try {
-      await startPayment({
-        contentId: item.id,
-        contentType: "mentorship_series",
-        title: item.title,
-        onSuccess: () => fetchFresh(true),
-      });
-    } catch (error: any) {
-      console.log("Payment error:", error?.response?.data || error?.message);
-      Alert.alert("Payment Failed", "Payment complete nahi hua.");
-    }
+  const buyMentorship = (item: any) => {
+    navigation.navigate("CheckoutScreen", {
+      item,
+      content_id: item.id,
+      content_type: "mentorship_series",
+    });
   };
 
   const renderPlanTab = (key: PlanTab, title: string, count: number, icon: any) => {
@@ -302,12 +331,56 @@ export default function MentorshipScreens() {
     );
   };
 
+  const renderPriceBlock = (item: any, small = false) => {
+    const isFree = normalizeBool(item?.is_free);
+    const hasAccess = hasPlanAccess(item);
+    const originalPricePaise = getOriginalPricePaise(item);
+    const discountPricePaise = getDiscountPricePaise(item);
+    const discountPercent = getDiscountPercent(item);
+
+    if (hasAccess) {
+      return <Text style={small ? styles.priceSmallMain : styles.footerPrice}>Unlocked</Text>;
+    }
+
+    if (isFree) {
+      return <Text style={small ? styles.priceSmallMain : styles.footerPrice}>FREE</Text>;
+    }
+
+    const hasDiscount =
+      originalPricePaise > 0 &&
+      discountPricePaise > 0 &&
+      discountPricePaise < originalPricePaise;
+
+    return (
+      <View>
+        <View style={styles.priceLine}>
+          <Text style={small ? styles.priceSmallMain : styles.footerPrice}>
+            {formatRupeesFromPaise(discountPricePaise)}
+          </Text>
+
+          {hasDiscount && (
+            <Text style={small ? styles.priceSmallCut : styles.footerCutPrice}>
+              {formatRupeesFromPaise(originalPricePaise)}
+            </Text>
+          )}
+        </View>
+
+        {hasDiscount && discountPercent > 0 && (
+          <Text style={small ? styles.priceSmallOff : styles.footerOff}>
+            {discountPercent}% OFF
+          </Text>
+        )}
+      </View>
+    );
+  };
+
   const renderCard = ({ item, index }: { item: any; index: number }) => {
     const isFree = normalizeBool(item?.is_free);
     const hasAccess = hasPlanAccess(item);
     const locked = !hasAccess;
     const ebookCount = getEbookCount(item);
     const testCount = getTestCount(item);
+    const discountPercent = getDiscountPercent(item);
 
     return (
       <AnimatedCard index={index}>
@@ -343,11 +416,13 @@ export default function MentorshipScreens() {
               </Text>
             </View>
 
-            <View style={styles.pricePill}>
-              <Text style={styles.pricePillText}>
-                {hasAccess ? "Unlocked" : getPriceText(item)}
-              </Text>
-            </View>
+            {!hasAccess && !isFree && discountPercent > 0 && (
+              <View style={styles.discountPill}>
+                <Text style={styles.discountPillText}>{discountPercent}% OFF</Text>
+              </View>
+            )}
+
+            <View style={styles.pricePill}>{renderPriceBlock(item, true)}</View>
           </View>
 
           <View style={styles.cardBody}>
@@ -382,11 +457,11 @@ export default function MentorshipScreens() {
             </View>
 
             <View style={styles.cardFooter}>
-              <View>
-                <Text style={styles.footerLabel}>{locked ? "Price" : "Current Status"}</Text>
-                <Text style={styles.footerPrice}>
-                  {hasAccess ? "Unlocked" : getPriceText(item)}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.footerLabel}>
+                  {locked ? "Offer Price" : "Current Status"}
                 </Text>
+                {renderPriceBlock(item)}
               </View>
 
               {locked ? (
@@ -437,7 +512,7 @@ export default function MentorshipScreens() {
   }
 
   return (
-   <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fbf7ff" />
 
       <View style={styles.container}>
@@ -507,7 +582,6 @@ export default function MentorshipScreens() {
           }
           ListHeaderComponent={
             <View>
-
               <Text style={styles.sectionTitle}>
                 {activeTab === "my" ? "My Unlocked Mentorships" : "Available Mentorships"}
               </Text>
@@ -570,21 +644,21 @@ const styles = StyleSheet.create({
   },
 
   header: {
-  backgroundColor: "#fbf7ff",
-  paddingHorizontal: 16,
-  paddingTop: Platform.OS === "android" ? 6 : 4,
-  paddingBottom: 10,
-  borderBottomLeftRadius: 22,
-  borderBottomRightRadius: 22,
-  borderWidth: 1,
-  borderColor: "#f3e8ff",
-},
+    backgroundColor: "#fbf7ff",
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === "android" ? 6 : 4,
+    paddingBottom: 10,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+    borderWidth: 1,
+    borderColor: "#f3e8ff",
+  },
   headerTop: {
-  flexDirection: "row",
-  alignItems: "flex-start",
-  gap: 12,
-  marginBottom: 13,
-},
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 13,
+  },
   headerTextBox: { flex: 1, minWidth: 0 },
   headerKicker: {
     color: PURPLE,
@@ -721,32 +795,6 @@ const styles = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 38,
   },
-  statsRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 18,
-  },
-  statBox: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-  },
-  statValue: {
-    color: DARK,
-    fontSize: 20,
-    fontWeight: "900",
-    marginTop: 5,
-  },
-  statLabel: {
-    color: MUTED,
-    fontSize: 11,
-    fontWeight: "800",
-    marginTop: 2,
-  },
   sectionTitle: {
     color: DARK,
     fontSize: 19,
@@ -798,6 +846,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "900",
   },
+  discountPill: {
+    position: "absolute",
+    top: 14,
+    right: 14,
+    backgroundColor: RED,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+  },
+  discountPillText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "900",
+  },
   pricePill: {
     position: "absolute",
     right: 14,
@@ -807,10 +869,29 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
   },
-  pricePillText: {
+
+  priceLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 7,
+    flexWrap: "wrap",
+  },
+  priceSmallMain: {
     color: DARK,
     fontSize: 13,
     fontWeight: "900",
+  },
+  priceSmallCut: {
+    color: MUTED,
+    fontSize: 11,
+    fontWeight: "800",
+    textDecorationLine: "line-through",
+  },
+  priceSmallOff: {
+    color: GREEN,
+    fontSize: 10,
+    fontWeight: "900",
+    marginTop: 1,
   },
 
   cardBody: { padding: 16 },
@@ -887,6 +968,19 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "900",
     marginTop: 1,
+  },
+  footerCutPrice: {
+    color: MUTED,
+    fontSize: 13,
+    fontWeight: "800",
+    textDecorationLine: "line-through",
+    marginTop: 2,
+  },
+  footerOff: {
+    color: GREEN,
+    fontSize: 12,
+    fontWeight: "900",
+    marginTop: 2,
   },
   buyButton: {
     minHeight: 44,

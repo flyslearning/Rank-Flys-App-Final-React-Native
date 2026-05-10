@@ -10,25 +10,28 @@ function getImageUrl(image: any) {
   return "";
 }
 
-export function getTestSeriesLocal() {
-  return db.getAllSync(`
-    SELECT
-      id,
-      title,
-      description,
-      explore_text,
-      image_url,
-      created_at,
-      price,
-      price_paise,
-      has_access = 1 AS has_access,
-      is_free = 1 AS is_free,
-      tests_count AS testsCount,
-      cached_at
-    FROM test_series
-    ORDER BY datetime(created_at) DESC
-  `);
-}
+  export function getTestSeriesLocal() {
+    return db.getAllSync(`
+      SELECT
+        id,
+        title,
+        description,
+        explore_text,
+        image_url,
+        created_at,
+        price,
+        price_paise,
+        original_price_paise,
+        discount_price_paise,
+        discount_percent,
+        has_access = 1 AS has_access,
+        is_free = 1 AS is_free,
+        tests_count AS testsCount,
+        cached_at
+      FROM test_series
+      ORDER BY datetime(created_at) DESC
+    `);
+  }
 
 export function saveTestSeries(series: any[]) {
   db.withTransactionSync(() => {
@@ -71,14 +74,25 @@ export function saveTestSeries(series: any[]) {
 
     for (const item of series) {
       db.runSync(
-        `
-        INSERT OR REPLACE INTO test_series
+        `INSERT OR REPLACE INTO test_series
         (
-          id, title, description, explore_text, image_url,
-          created_at, price, price_paise, has_access,
-          is_free, tests_count, cached_at
+          id,
+          title,
+          description,
+          explore_text,
+          image_url,
+          created_at,
+          price,
+          price_paise,
+          original_price_paise,
+          discount_price_paise,
+          discount_percent,
+          has_access,
+          is_free,
+          tests_count,
+          cached_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           item.id,
@@ -89,15 +103,20 @@ export function saveTestSeries(series: any[]) {
           item.created_at ?? "",
           item.price ?? 0,
           item.price_paise ?? 0,
+
+          item.original_price_paise ?? item.price_paise ?? 0,
+          item.discount_price_paise ?? item.price_paise ?? 0,
+          item.discount_percent ?? 0,
+
           item.has_access ? 1 : 0,
           item.is_free ? 1 : 0,
           item.testsCount ?? item.tests_count ?? 0,
           Date.now(),
         ]
-      );
-    }
-  });
-}
+        );
+            }
+        });
+      }
 
 export function getTestsLocal(seriesId: string) {
   return db.getAllSync(

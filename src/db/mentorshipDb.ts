@@ -16,6 +16,9 @@ export type Mentorship = {
   created_at: string;
   price_paise: number;
   price_rupees: number;
+  original_price_paise: number;
+  discount_price_paise: number;
+  discount_percent: number;
   is_free: boolean;
   has_access: boolean;
   items: MentorshipItem[];
@@ -27,6 +30,9 @@ const normalizeMentorship = (m: any): Mentorship => {
     Number(m.price_rupees ?? 0) > 0
       ? Number(m.price_rupees)
       : Math.round(pricePaise / 100);
+  const originalPricePaise = Number(m.original_price_paise ?? pricePaise);
+  const discountPricePaise = Number(m.discount_price_paise ?? pricePaise);
+  const discountPercent = Number(m.discount_percent ?? 0);
 
   return {
     id: String(m.id),
@@ -39,6 +45,9 @@ const normalizeMentorship = (m: any): Mentorship => {
     created_at: m.created_at ?? "",
     price_paise: pricePaise,
     price_rupees: priceRupees,
+    original_price_paise: originalPricePaise,
+    discount_price_paise: discountPricePaise,
+    discount_percent: discountPercent,
     is_free: Boolean(m.is_free),
     has_access: Boolean(m.has_access),
     items: Array.isArray(m.items) ? m.items : [],
@@ -95,6 +104,9 @@ export const mentorshipDb = {
             m.created_at,
             m.price_paise,
             m.price_rupees,
+            m.original_price_paise,
+            m.discount_price_paise,
+            m.discount_percent,
             m.is_free ? 1 : 0,
             m.has_access ? 1 : 0,
           ]

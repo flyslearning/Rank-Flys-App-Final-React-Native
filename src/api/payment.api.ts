@@ -1,13 +1,24 @@
 import { paymentClient } from "./client";
 
-export type ContentType = "test_series" | "ebook_series" | "mentorship_series";
+export type ContentType =
+  | "test_series"
+  | "ebook_series"
+  | "mentorship_series";
 
 export const PaymentAPI = {
   createOrder: async (payload: {
     content_id: string;
     content_type: ContentType;
+    coupon_code?: string;
   }) => {
-    const res = await paymentClient.post("/payments/orders", payload);
+    const res = await paymentClient.post("/payments/orders", {
+      content_id: payload.content_id,
+      content_type: payload.content_type,
+      ...(payload.coupon_code
+        ? { coupon_code: payload.coupon_code }
+        : {}),
+    });
+
     return res.data;
   },
 
@@ -19,6 +30,19 @@ export const PaymentAPI = {
     const res = await paymentClient.post("/payments/verify", payload);
     return res.data;
   },
+
+  validateCoupon: async (payload: {
+    content_id: string;
+    content_type: ContentType;
+    coupon_code: string;
+  }) => {
+    const res = await paymentClient.post(
+      "/payments/coupon/validate",
+      payload
+    );
+
+    return res.data;
+  },
 };
 
 export const checkAccess = async (params: {
@@ -28,7 +52,6 @@ export const checkAccess = async (params: {
   const res = await paymentClient.get("/payments/access", { params });
   return res.data;
 };
-
 
 export type PurchaseItem = {
   order_id: string;
