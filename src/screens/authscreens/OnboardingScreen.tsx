@@ -15,6 +15,7 @@ import {
 import LottieView from "lottie-react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { RootStackParamList, Goal, ClassItem } from "../../types";
 import AppInput from "../../components/AppInput";
@@ -132,6 +133,22 @@ export default function OnboardingScreen({ navigation }: Props) {
         goal_id: goalId,
         class_id: classId,
       });
+
+      const refreshToken = await AsyncStorage.getItem("refresh_token");
+
+      if (refreshToken) {
+        const refreshRes = await AuthAPI.refresh(refreshToken);
+
+        await AsyncStorage.setItem(
+          "access_token",
+          refreshRes.data.access_token
+        );
+
+        await AsyncStorage.setItem(
+          "refresh_token",
+          refreshRes.data.refresh_token
+        );
+      }
 
       navigation.replace("MainTabs");
     } catch {

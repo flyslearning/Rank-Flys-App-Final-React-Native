@@ -16,6 +16,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { AuthAPI } from "../api/auth.api";
 import { MetaAPI } from "../api/meta.api";
@@ -139,32 +140,50 @@ export default function ProfileScreen() {
   };
 
   const saveProfile = async () => {
-    if (!firstName.trim() || !lastName.trim() || !gender || !goalId || !classId) {
-      Alert.alert("Missing Fields", "Please fill all profile details");
-      return;
+  if (!firstName.trim() || !lastName.trim() || !gender || !goalId || !classId) {
+    Alert.alert("Missing Fields", "Please fill all profile details");
+    return;
+  }
+
+  try {
+    setSaving(true);
+
+    await AuthAPI.completeProfile({
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      gender,
+      goal_id: goalId,
+      class_id: classId,
+    });
+
+    // ✅ ONLY REFRESH CALL ADDED
+    const refreshToken = await AsyncStorage.getItem("refresh_token");
+
+    if (refreshToken) {
+      const refreshRes = await AuthAPI.refresh(refreshToken);
+
+      await AsyncStorage.setItem(
+        "access_token",
+        refreshRes.data.access_token
+      );
+
+      await AsyncStorage.setItem(
+        "refresh_token",
+        refreshRes.data.refresh_token
+      );
+      
     }
 
-    try {
-      setSaving(true);
-
-      await AuthAPI.completeProfile({
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
-        gender,
-        goal_id: goalId,
-        class_id: classId,
-      });
-
-      Alert.alert("Success", "Profile updated successfully");
-      setEditMode(false);
-      init();
-    } catch (error: any) {
-      console.log("Profile update error:", error?.response?.data || error.message);
-      Alert.alert("Error", "Profile update failed");
-    } finally {
-      setSaving(false);
-    }
-  };
+    Alert.alert("Success", "Profile updated successfully");
+    setEditMode(false);
+    init();
+  } catch (error: any) {
+    console.log("Profile update error:", error?.response?.data || error.message);
+    Alert.alert("Error", "Profile update failed");
+  } finally {
+    setSaving(false);
+  }
+};
 
   if (loading) {
     return (
