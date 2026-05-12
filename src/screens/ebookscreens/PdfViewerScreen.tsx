@@ -7,11 +7,10 @@ import {
   ActivityIndicator,
   StatusBar,
   Alert,
-  Platform,
   AppState,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { WebView } from "react-native-webview";
+import Pdf from "react-native-pdf";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as ScreenCapture from "expo-screen-capture";
@@ -21,26 +20,26 @@ type Props = NativeStackScreenProps<RootStackParamList, "PdfViewer">;
 
 export default function PdfViewerScreen({ route, navigation }: Props) {
   const { title, fileUrl } = route.params;
+
   const [loading, setLoading] = useState(true);
+  const [loadPercent, setLoadPercent] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
   const [hiddenForPrivacy, setHiddenForPrivacy] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const pdfUrl = useMemo(() => {
+    const separator = fileUrl.includes("?") ? "&" : "?";
+    return `${fileUrl}${separator}v=${Date.now()}-${reloadKey}`;
+  }, [fileUrl, reloadKey]);
 
   const isSecurePdf = useMemo(() => {
-    return (
-      fileUrl.startsWith("https://") &&
-      fileUrl.toLowerCase().split("?")[0].endsWith(".pdf")
-    );
+    const cleanUrl = fileUrl.toLowerCase().split("?")[0];
+    return fileUrl.startsWith("https://") && cleanUrl.endsWith(".pdf");
   }, [fileUrl]);
 
   useEffect(() => {
-    const enablePrivacy = async () => {
-      try {
-        await ScreenCapture.preventScreenCaptureAsync();
-      } catch (error) {
-        console.log("Screen privacy error:", error);
-      }
-    };
-
-    enablePrivacy();
+    ScreenCapture.preventScreenCaptureAsync().catch(console.log);
 
     const subscription = AppState.addEventListener("change", (state) => {
       setHiddenForPrivacy(state !== "active");
@@ -48,82 +47,31 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
 
     return () => {
       subscription.remove();
-
-      ScreenCapture.allowScreenCaptureAsync().catch((error) => {
-        console.log("Allow screen capture error:", error);
-      });
+      ScreenCapture.allowScreenCaptureAsync().catch(console.log);
     };
   }, []);
 
-  const viewerUrl =
-    Platform.OS === "android"
-      ? `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(
-          fileUrl
-        )}`
-      : fileUrl;
-
-  const securityScript = `
-    document.documentElement.style.webkitUserSelect = 'none';
-    document.documentElement.style.userSelect = 'none';
-    document.documentElement.style.webkitTouchCallout = 'none';
-
-    document.addEventListener('contextmenu', function(e) {
-      e.preventDefault();
-    });
-
-    document.addEventListener('copy', function(e) {
-      e.preventDefault();
-    });
-
-    document.addEventListener('cut', function(e) {
-      e.preventDefault();
-    });
-
-    document.addEventListener('selectstart', function(e) {
-      e.preventDefault();
-    });
-
-    true;
-  `;
-
-  const Header = ({ heading }: { heading: string }) => (
-    <View style={styles.header}>
-      <TouchableOpacity
-        activeOpacity={0.85}
-        style={styles.backBtn}
-        onPress={() => navigation.goBack()}
-      >
-        <Ionicons name="arrow-back" size={22} color="#2563eb" />
-      </TouchableOpacity>
-
-      <View style={styles.headerTextBox}>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {heading}
-        </Text>
-        <Text style={styles.secureText}>Protected ebook viewer</Text>
-      </View>
-
-      <View style={styles.lockBox}>
-        <Ionicons name="lock-closed" size={17} color="#16a34a" />
-      </View>
-    </View>
-  );
+  const handleRetry = () => {
+    setLoading(true);
+    setLoadPercent(0);
+    setTotalPages(0);
+    setCurrentPage(0);
+    setReloadKey((prev) => prev + 1);
+  };
 
   if (!isSecurePdf) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
-
-        <Header heading="Invalid PDF" />
+      <SafeAreaView style={styles.safeArea}>
+        <Header title="Invalid PDF" onBack={() => navigation.goBack()} />
 
         <View style={styles.center}>
-          <Ionicons name="shield-alert-outline" size={54} color="#ef4444" />
+          <Ionicons name="alert-circle-outline" size={58} color="#ef4444" />
+          <Text style={styles.errorTitle}>Invalid PDF URL</Text>
+          <Text style={styles.errorText}>{fileUrl}</Text>
 
-          <Text style={styles.errorTitle}>Blocked for security</Text>
-
-          <Text style={styles.errorText}>
-            Only secure HTTPS PDF files are allowed inside the app.
-          </Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => navigation.goBack()}>
+            <Text style={styles.retryBtnText}>Go Back</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
@@ -131,18 +79,14 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
 
   if (hiddenForPrivacy) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
-
-        <Header heading="Protected" />
+      <SafeAreaView style={styles.safeArea}>
+        <Header title="Protected" onBack={() => navigation.goBack()} />
 
         <View style={styles.center}>
           <Ionicons name="eye-off-outline" size={58} color="#2563eb" />
-
           <Text style={styles.errorTitle}>Content hidden</Text>
-
           <Text style={styles.errorText}>
-            Ebook content is hidden when the app is not active.
+            App background me hai, PDF privacy ke liye hidden hai.
           </Text>
         </View>
       </SafeAreaView>
@@ -150,63 +94,141 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="dark-content" backgroundColor="#f8fafc" />
 
-      <Header heading={title} />
+      <Header title={title} onBack={() => navigation.goBack()} />
 
-      <View style={styles.warningBox}>
+      <View style={styles.actionBar}>
+        <View style={styles.pageChip}>
+          <Ionicons name="document-text-outline" size={16} color="#2563eb" />
+          <Text style={styles.pageChipText}>
+            {totalPages > 0 ? `Page ${currentPage}/${totalPages}` : "Preparing PDF"}
+          </Text>
+        </View>
+
+        <TouchableOpacity style={styles.iconBtn} onPress={handleRetry}>
+          <Ionicons name="refresh" size={18} color="#2563eb" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.infoBox}>
         <Ionicons name="shield-checkmark-outline" size={16} color="#16a34a" />
-        <Text style={styles.warningText}>
-          Screenshot, screen recording and external opening are restricted.
+        <Text style={styles.infoText}>
+          Secure PDF viewer enabled. Zoom aur swipe pages available hai.
         </Text>
       </View>
 
-      <View style={styles.webWrap}>
+      <View style={styles.pdfWrap}>
         {loading && (
           <View style={styles.loader}>
             <ActivityIndicator size="large" color="#2563eb" />
-            <Text style={styles.loadingText}>Opening protected PDF...</Text>
+
+            <Text style={styles.loadingTitle}>PDF loading...</Text>
+            <Text style={styles.loadingPercent}>{loadPercent}%</Text>
+
+            <View style={styles.progressOuter}>
+              <View
+                style={[
+                  styles.progressInner,
+                  { width: `${Math.min(loadPercent, 100)}%` },
+                ]}
+              />
+            </View>
+
+            <Text style={styles.loadingText}>
+              PDF ready hote hi automatically open ho jayegi.
+            </Text>
+
+            <View style={styles.detailBox}>
+              <View style={styles.detailRow}>
+                <Ionicons name="cloud-download-outline" size={17} color="#2563eb" />
+                <Text style={styles.detailText}>Downloading / Preparing PDF</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Ionicons name="reader-outline" size={17} color="#2563eb" />
+                <Text style={styles.detailText}>
+                  Pages: {totalPages > 0 ? totalPages : "Loading..."}
+                </Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Ionicons name="phone-portrait-outline" size={17} color="#2563eb" />
+                <Text style={styles.detailText}>Optimized for mobile reading</Text>
+              </View>
+            </View>
           </View>
         )}
 
-        <WebView
-          source={{ uri: viewerUrl }}
-          style={styles.webview}
-          javaScriptEnabled={true}
-          domStorageEnabled={false}
-          cacheEnabled={false}
-          incognito={true}
-          originWhitelist={["https://*"]}
-          injectedJavaScript={securityScript}
-          injectedJavaScriptBeforeContentLoaded={securityScript}
-          allowsBackForwardNavigationGestures={false}
-          allowFileAccess={false}
-          allowUniversalAccessFromFileURLs={false}
-          mixedContentMode="never"
-          setSupportMultipleWindows={false}
-          pullToRefreshEnabled={false}
-          showsHorizontalScrollIndicator={false}
-          showsVerticalScrollIndicator={true}
-          onLoadEnd={() => setLoading(false)}
-          onError={() => {
-            setLoading(false);
-            Alert.alert("Error", "PDF failed to load.");
+        <Pdf
+          key={reloadKey}
+          source={{
+            uri: pdfUrl,
+            cache: false,
           }}
-          onShouldStartLoadWithRequest={(request) => {
-            const url = request.url;
+          trustAllCerts={false}
+          enablePaging={true}
+          horizontal={false}
+          spacing={4}
+          fitPolicy={0}
+          minScale={1}
+          maxScale={3}
+          style={styles.pdf}
+          onLoadProgress={(percent) => {
+            const value = Math.round(percent * 100);
+            setLoadPercent(value);
+            setLoading(true);
+          }}
+          onLoadComplete={(pages) => {
+            setTotalPages(pages);
+            setCurrentPage(1);
+            setLoadPercent(100);
+            setLoading(false);
+          }}
+          onPageChanged={(page, pages) => {
+            setCurrentPage(page);
+            setTotalPages(pages);
+          }}
+          onError={(error) => {
+            setLoading(false);
+            console.log("PDF load error:", error);
 
-            if (url.startsWith("about:blank")) return true;
-
-            if (Platform.OS === "android") {
-              return url.startsWith("https://docs.google.com/");
-            }
-
-            return url === fileUrl;
+            Alert.alert(
+              "PDF Error",
+              "PDF open nahi ho raha. Please retry karo ya PDF URL check karo."
+            );
           }}
         />
       </View>
     </SafeAreaView>
+  );
+}
+
+function Header({
+  title,
+  onBack,
+}: {
+  title: string;
+  onBack: () => void;
+}) {
+  return (
+    <View style={styles.header}>
+      <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+        <Ionicons name="arrow-back" size={22} color="#2563eb" />
+      </TouchableOpacity>
+
+      <View style={styles.headerTextBox}>
+        <Text style={styles.headerTitle} numberOfLines={1}>
+          {title}
+        </Text>
+        <Text style={styles.secureText}>Protected PDF Viewer</Text>
+      </View>
+
+      <View style={styles.lockBox}>
+        <Ionicons name="lock-closed" size={17} color="#16a34a" />
+      </View>
+    </View>
   );
 }
 
@@ -254,66 +276,161 @@ const styles = StyleSheet.create({
     backgroundColor: "#dcfce7",
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: 10,
   },
-  warningBox: {
+  actionBar: {
     marginHorizontal: 12,
-    marginVertical: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  pageChip: {
+    flex: 1,
+    height: 42,
     borderRadius: 14,
+    backgroundColor: "#eff6ff",
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    marginRight: 10,
+  },
+  pageChipText: {
+    marginLeft: 7,
+    fontSize: 13,
+    fontWeight: "900",
+    color: "#1d4ed8",
+  },
+  iconBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  infoBox: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 12,
     backgroundColor: "#f0fdf4",
     borderWidth: 1,
     borderColor: "#bbf7d0",
     flexDirection: "row",
     alignItems: "center",
   },
-  warningText: {
+  infoText: {
     flex: 1,
     marginLeft: 8,
     fontSize: 12,
     fontWeight: "700",
     color: "#166534",
   },
-  webWrap: {
+  pdfWrap: {
     flex: 1,
+    marginTop: 8,
     backgroundColor: "#ffffff",
   },
-  webview: {
+  pdf: {
     flex: 1,
+    width: "100%",
+    height: "100%",
     backgroundColor: "#ffffff",
   },
   loader: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#ffffff",
     zIndex: 10,
+    backgroundColor: "#ffffff",
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  loadingTitle: {
+    marginTop: 14,
+    fontSize: 18,
+    fontWeight: "900",
+    color: "#0f172a",
+  },
+  loadingPercent: {
+    marginTop: 8,
+    fontSize: 34,
+    fontWeight: "900",
+    color: "#2563eb",
+  },
+  progressOuter: {
+    width: "100%",
+    height: 12,
+    borderRadius: 999,
+    backgroundColor: "#e5e7eb",
+    overflow: "hidden",
+    marginTop: 14,
+  },
+  progressInner: {
+    height: "100%",
+    borderRadius: 999,
+    backgroundColor: "#2563eb",
   },
   loadingText: {
     marginTop: 12,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
     color: "#64748b",
+    textAlign: "center",
+  },
+  detailBox: {
+    width: "100%",
+    marginTop: 18,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  detailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 5,
+  },
+  detailText: {
+    marginLeft: 8,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#475569",
   },
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
   },
   errorTitle: {
-    marginTop: 14,
+    marginTop: 12,
     fontSize: 20,
     fontWeight: "900",
     color: "#0f172a",
   },
   errorText: {
     marginTop: 8,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     color: "#64748b",
     textAlign: "center",
-    lineHeight: 21,
+  },
+  retryBtn: {
+    marginTop: 18,
+    height: 44,
+    paddingHorizontal: 22,
+    borderRadius: 14,
+    backgroundColor: "#2563eb",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  retryBtnText: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: "#ffffff",
   },
 });

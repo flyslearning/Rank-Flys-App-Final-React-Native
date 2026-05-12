@@ -24,6 +24,11 @@ export type RootStackParamList = {
     title: string;
     fileUrl: string;
   };
+    EbookPageViewer: {
+    title: string;
+    pageBaseUrl: string;
+    totalPages: number;
+  };
 
    CheckoutScreen: {
     item: any;
@@ -120,6 +125,10 @@ export type EbookNode = {
   series_id: string;
   file_url?: string | null;
   has_children?: boolean;
+
+  viewer_type?: "pages" | "pdf" | "image" | "video" | string | null;
+  page_base_url?: string | null;
+  page_count?: number | null;
 
   order?: number | null;
   sort_order?: number | null;

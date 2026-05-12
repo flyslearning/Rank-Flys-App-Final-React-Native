@@ -10,6 +10,7 @@ import {
   Keyboard,
   Modal,
   FlatList,
+  ScrollView,
 } from "react-native";
 import LottieView from "lottie-react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -95,6 +96,19 @@ export default function OnboardingScreen({ navigation }: Props) {
     }
   };
 
+  const clearGoal = () => {
+    setGoalId("");
+    setSelectedGoalName("");
+    setClassId("");
+    setSelectedClassName("");
+    setClasses([]);
+  };
+
+  const clearClass = () => {
+    setClassId("");
+    setSelectedClassName("");
+  };
+
   const handleNext = () => {
     if (!firstName.trim() || !lastName.trim()) {
       Alert.alert("Enter name properly");
@@ -130,7 +144,6 @@ export default function OnboardingScreen({ navigation }: Props) {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={styles.container}>
-
         {/* TOP */}
         <View style={{ marginTop: insets.top + 20 }}>
           <LottieView
@@ -146,7 +159,6 @@ export default function OnboardingScreen({ navigation }: Props) {
 
         {/* CONTENT */}
         <View style={styles.content}>
-
           {step === 1 && (
             <>
               <AppInput
@@ -186,19 +198,33 @@ export default function OnboardingScreen({ navigation }: Props) {
 
           {step === 2 && (
             <>
-              {/* 🔥 SELECTED GOAL */}
               {selectedGoalName ? (
                 <View style={styles.selectedBox}>
-                  <Text style={styles.selectedLabel}>Selected Goal</Text>
-                  <Text style={styles.selectedValue}>{selectedGoalName}</Text>
+                  <View style={styles.selectedHeader}>
+                    <View>
+                      <Text style={styles.selectedLabel}>Selected Goal</Text>
+                      <Text style={styles.selectedValue}>{selectedGoalName}</Text>
+                    </View>
+
+                    <TouchableOpacity onPress={clearGoal} style={styles.crossBtn}>
+                      <Text style={styles.crossText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : null}
 
-              {/* 🔥 SELECTED CLASS */}
               {selectedClassName ? (
                 <View style={styles.selectedBox}>
-                  <Text style={styles.selectedLabel}>Selected Class</Text>
-                  <Text style={styles.selectedValue}>{selectedClassName}</Text>
+                  <View style={styles.selectedHeader}>
+                    <View>
+                      <Text style={styles.selectedLabel}>Selected Class</Text>
+                      <Text style={styles.selectedValue}>{selectedClassName}</Text>
+                    </View>
+
+                    <TouchableOpacity onPress={clearClass} style={styles.crossBtn}>
+                      <Text style={styles.crossText}>×</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               ) : null}
 
@@ -211,6 +237,7 @@ export default function OnboardingScreen({ navigation }: Props) {
                   data={uniqueGoals}
                   keyExtractor={(item) => item.id}
                   showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.goalListContent}
                   renderItem={({ item }) => (
                     <TouchableOpacity
                       style={[
@@ -247,30 +274,39 @@ export default function OnboardingScreen({ navigation }: Props) {
         {/* MODAL */}
         <Modal visible={classModal} transparent animationType="slide">
           <View style={styles.modalBg}>
-            <View style={styles.modalCard}>
+            <View
+              style={[
+                styles.modalCard,
+                { paddingBottom: insets.bottom + 35 },
+              ]}
+            >
               <Text style={styles.modalTitle}>Select Class</Text>
 
               {loadingClasses ? (
                 <ActivityIndicator />
               ) : (
-                uniqueClasses.map((cls) => (
-                  <TouchableOpacity
-                    key={cls.id}
-                    style={styles.modalItem}
-                    onPress={() => {
-                      setClassId(cls.id);
-                      setSelectedClassName(cls.name);
-                      setClassModal(false);
-                    }}
-                  >
-                    <Text style={styles.itemText}>{cls.name}</Text>
-                  </TouchableOpacity>
-                ))
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.classListContent}
+                >
+                  {uniqueClasses.map((cls) => (
+                    <TouchableOpacity
+                      key={cls.id}
+                      style={styles.modalItem}
+                      onPress={() => {
+                        setClassId(cls.id);
+                        setSelectedClassName(cls.name);
+                        setClassModal(false);
+                      }}
+                    >
+                      <Text style={styles.itemText}>{cls.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               )}
             </View>
           </View>
         </Modal>
-
       </View>
     </TouchableWithoutFeedback>
   );
@@ -296,7 +332,11 @@ const styles = StyleSheet.create({
   genderText: { fontWeight: "700" },
   activeText: { color: "#fff" },
 
-  label: { marginTop: 10, marginBottom: 10 , fontFamily: "Geologica"},
+  label: { marginTop: 10, marginBottom: 10, fontFamily: "Geologica" },
+
+  goalListContent: {
+    paddingBottom: 120,
+  },
 
   item: {
     padding: 14,
@@ -313,7 +353,6 @@ const styles = StyleSheet.create({
   itemText: { fontWeight: "700", color: "#0f172a" },
   selectedItemText: { color: "#fff" },
 
-  /* 🔥 SELECTED BOX */
   selectedBox: {
     padding: 14,
     borderRadius: 14,
@@ -321,6 +360,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#c7d2fe",
     marginBottom: 10,
+  },
+  selectedHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
   selectedLabel: {
     fontSize: 12,
@@ -332,6 +377,20 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#1e3a8a",
     fontFamily: "Geologica",
+  },
+  crossBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#dbeafe",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  crossText: {
+    fontSize: 22,
+    lineHeight: 24,
+    fontWeight: "900",
+    color: "#1e3a8a",
   },
 
   bottom: {
@@ -351,10 +410,19 @@ const styles = StyleSheet.create({
   modalCard: {
     backgroundColor: "#fff",
     padding: 20,
+    maxHeight: "70%",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
-  modalTitle: { fontSize: 18, fontWeight: "900", marginBottom: 10, fontFamily: "Geologica"},
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 10,
+    fontFamily: "Geologica",
+  },
+  classListContent: {
+    paddingBottom: 20,
+  },
   modalItem: {
     padding: 14,
     borderRadius: 12,

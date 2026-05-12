@@ -30,6 +30,7 @@ import ReelScreen from "../screens/reelscreens/ReelScreen";
 import EbookSeriesScreen from "../screens/ebookscreens/EbookSeriesScreen";
 import EbookNodesScreen from "../screens/ebookscreens/EbookNodesScreen";
 import PdfViewerScreen from "../screens/ebookscreens/PdfViewerScreen";
+import EbookPageViewer from "../screens/ebookscreens/EbookPageViewer";
 import DoubtScreen from "../screens/DoubtScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import ToolPage from "../screens/extrascreens/ToolPage"
@@ -172,6 +173,11 @@ export default function RootNavigator() {
             />
 
             <Stack.Screen name="PdfViewer" component={PdfViewerScreen} />
+            <Stack.Screen
+              name="EbookPageViewer"
+              component={EbookPageViewer}
+              options={{ headerShown: false }}
+            />
          
             <Stack.Screen
             name="SyllabusTracker"

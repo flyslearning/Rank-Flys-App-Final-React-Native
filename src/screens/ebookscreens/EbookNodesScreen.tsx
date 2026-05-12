@@ -23,7 +23,7 @@ import { EbookDb } from "../../db/ebookDb";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EbookNodes">;
 
-const PDF_BASE_URL = "https://your-domain.com/uploads/";
+const PDF_BASE_URL = "https://api.flyslearning.com/ebook-file/";
 
 export default function EbookNodesScreen({ route, navigation }: Props) {
   const { seriesId, seriesTitle, parentId, parentTitle } = route.params;
@@ -117,6 +117,9 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
           type: item.type || "file",
           parent_id: item.parent_id ?? safeParentId,
           file_url: item.file_url || null,
+          viewer_type: item.viewer_type || item.viewerType || null,
+          page_base_url: item.page_base_url || item.pageBaseUrl || null,
+          page_count: Number(item.page_count || item.pageCount || 0),
           is_demo:
             item.is_demo === true ||
             item.is_demo === 1 ||
@@ -206,35 +209,50 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
   };
 
   const openNode = async (node: EbookNode) => {
-    if (!canOpenNode(node)) {
-      showPurchaseAlert();
-      return;
-    }
+  if (!canOpenNode(node)) {
+    showPurchaseAlert();
+    return;
+  }
 
-    const type = normalizeNodeType(node);
+  const type = normalizeNodeType(node);
 
-    if (type === "folder") {
-      navigation.push("EbookNodes", {
-        seriesId,
-        seriesTitle,
-        parentId: node.id,
-        parentTitle: getNodeTitle(node),
-      });
-      return;
-    }
-
-    const securePdfUrl = getSecurePdfUrl(node.file_url);
-
-    if (!securePdfUrl) {
-      Alert.alert("Invalid File", "Only secure HTTPS PDF files are allowed.");
-      return;
-    }
-
-    navigation.navigate("PdfViewer", {
-      title: getNodeTitle(node),
-      fileUrl: securePdfUrl,
+  if (type === "folder") {
+    navigation.push("EbookNodes", {
+      seriesId,
+      seriesTitle,
+      parentId: node.id,
+      parentTitle: getNodeTitle(node),
     });
-  };
+    return;
+  }
+
+  const anyNode: any = node;
+
+  if (
+    anyNode.viewer_type === "pages" &&
+    anyNode.page_base_url &&
+    Number(anyNode.page_count) > 0
+  ) {
+    navigation.navigate("EbookPageViewer", {
+      title: getNodeTitle(node),
+      pageBaseUrl: anyNode.page_base_url,
+      totalPages: Number(anyNode.page_count),
+    });
+    return;
+  }
+
+  const securePdfUrl = getSecurePdfUrl(node.file_url);
+
+  if (!securePdfUrl) {
+    Alert.alert("Invalid File", "File URL is invalid.");
+    return;
+  }
+
+  navigation.navigate("PdfViewer", {
+    title: getNodeTitle(node),
+    fileUrl: securePdfUrl,
+  });
+};
 
   const renderNode = ({ item }: { item: EbookNode }) => {
     const type = normalizeNodeType(item);
