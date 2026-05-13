@@ -1,32 +1,40 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ActivityIndicator,
   StatusBar,
   Alert,
   AppState,
+  Animated,
+  Easing,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Pdf from "react-native-pdf";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as ScreenCapture from "expo-screen-capture";
+
 import { RootStackParamList } from "../../types";
+import { useAuthStore } from "../../store/auth.store";
 
 type Props = NativeStackScreenProps<RootStackParamList, "PdfViewer">;
 
 export default function PdfViewerScreen({ route, navigation }: Props) {
   const { title, fileUrl } = route.params;
 
+  const accessToken = useAuthStore((state) => state.accessToken);
+
   const [loading, setLoading] = useState(true);
-  const [loadPercent, setLoadPercent] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
   const [hiddenForPrivacy, setHiddenForPrivacy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const dotAnim = useRef(new Animated.Value(0)).current;
 
   const pdfUrl = useMemo(() => {
     const separator = fileUrl.includes("?") ? "&" : "?";
@@ -51,13 +59,83 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!loading) return;
+
+    const rotateLoop = Animated.loop(
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration: 1200,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.12,
+          duration: 650,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 650,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    const dotLoop = Animated.loop(
+      Animated.timing(dotAnim, {
+        toValue: 1,
+        duration: 900,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+
+    rotateLoop.start();
+    pulseLoop.start();
+    dotLoop.start();
+
+    return () => {
+      rotateLoop.stop();
+      pulseLoop.stop();
+      dotLoop.stop();
+      rotateAnim.setValue(0);
+      dotAnim.setValue(0);
+    };
+  }, [loading, rotateAnim, pulseAnim, dotAnim]);
+
   const handleRetry = () => {
     setLoading(true);
-    setLoadPercent(0);
     setTotalPages(0);
     setCurrentPage(0);
     setReloadKey((prev) => prev + 1);
   };
+
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  const dotOneOpacity = dotAnim.interpolate({
+    inputRange: [0, 0.33, 0.66, 1],
+    outputRange: [0.25, 1, 0.25, 0.25],
+  });
+
+  const dotTwoOpacity = dotAnim.interpolate({
+    inputRange: [0, 0.33, 0.66, 1],
+    outputRange: [0.25, 0.25, 1, 0.25],
+  });
+
+  const dotThreeOpacity = dotAnim.interpolate({
+    inputRange: [0, 0.33, 0.66, 1],
+    outputRange: [0.25, 0.25, 0.25, 1],
+  });
 
   if (!isSecurePdf) {
     return (
@@ -69,7 +147,33 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
           <Text style={styles.errorTitle}>Invalid PDF URL</Text>
           <Text style={styles.errorText}>{fileUrl}</Text>
 
-          <TouchableOpacity style={styles.retryBtn} onPress={() => navigation.goBack()}>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.retryBtnText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!accessToken) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <Header title="Authentication Error" onBack={() => navigation.goBack()} />
+
+        <View style={styles.center}>
+          <Ionicons name="lock-closed-outline" size={58} color="#ef4444" />
+          <Text style={styles.errorTitle}>Login Required</Text>
+          <Text style={styles.errorText}>
+            Access token missing hai. Please login again.
+          </Text>
+
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => navigation.goBack()}
+          >
             <Text style={styles.retryBtnText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -103,7 +207,9 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
         <View style={styles.pageChip}>
           <Ionicons name="document-text-outline" size={16} color="#2563eb" />
           <Text style={styles.pageChipText}>
-            {totalPages > 0 ? `Page ${currentPage}/${totalPages}` : "Preparing PDF"}
+            {totalPages > 0
+              ? `Page ${currentPage}/${totalPages}`
+              : "Preparing PDF"}
           </Text>
         </View>
 
@@ -122,40 +228,45 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
       <View style={styles.pdfWrap}>
         {loading && (
           <View style={styles.loader}>
-            <ActivityIndicator size="large" color="#2563eb" />
+            <Animated.View
+              style={[
+                styles.loaderCircle,
+                {
+                  transform: [{ rotate }, { scale: pulseAnim }],
+                },
+              ]}
+            >
+              <View style={styles.loaderInner}>
+                <Ionicons name="document-text" size={42} color="#2563eb" />
+              </View>
+            </Animated.View>
 
-            <Text style={styles.loadingTitle}>PDF loading...</Text>
-            <Text style={styles.loadingPercent}>{loadPercent}%</Text>
+            <Text style={styles.loadingTitle}>Opening secure PDF</Text>
 
-            <View style={styles.progressOuter}>
-              <View
-                style={[
-                  styles.progressInner,
-                  { width: `${Math.min(loadPercent, 100)}%` },
-                ]}
-              />
+            <View style={styles.dotsRow}>
+              <Animated.View style={[styles.dot, { opacity: dotOneOpacity }]} />
+              <Animated.View style={[styles.dot, { opacity: dotTwoOpacity }]} />
+              <Animated.View style={[styles.dot, { opacity: dotThreeOpacity }]} />
             </View>
 
             <Text style={styles.loadingText}>
-              PDF ready hote hi automatically open ho jayegi.
+              Please wait, PDF ready hote hi automatically open ho jayegi.
             </Text>
 
             <View style={styles.detailBox}>
               <View style={styles.detailRow}>
-                <Ionicons name="cloud-download-outline" size={17} color="#2563eb" />
-                <Text style={styles.detailText}>Downloading / Preparing PDF</Text>
+                <Ionicons name="cloud-outline" size={17} color="#2563eb" />
+                <Text style={styles.detailText}>Secure file connecting</Text>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Ionicons name="lock-closed-outline" size={17} color="#2563eb" />
+                <Text style={styles.detailText}>Protected access verified</Text>
               </View>
 
               <View style={styles.detailRow}>
                 <Ionicons name="reader-outline" size={17} color="#2563eb" />
-                <Text style={styles.detailText}>
-                  Pages: {totalPages > 0 ? totalPages : "Loading..."}
-                </Text>
-              </View>
-
-              <View style={styles.detailRow}>
-                <Ionicons name="phone-portrait-outline" size={17} color="#2563eb" />
-                <Text style={styles.detailText}>Optimized for mobile reading</Text>
+                <Text style={styles.detailText}>Preparing mobile viewer</Text>
               </View>
             </View>
           </View>
@@ -166,6 +277,10 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
           source={{
             uri: pdfUrl,
             cache: false,
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: "application/pdf",
+            },
           }}
           trustAllCerts={false}
           enablePaging={true}
@@ -175,15 +290,12 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
           minScale={1}
           maxScale={3}
           style={styles.pdf}
-          onLoadProgress={(percent) => {
-            const value = Math.round(percent * 100);
-            setLoadPercent(value);
+          onLoadProgress={() => {
             setLoading(true);
           }}
           onLoadComplete={(pages) => {
             setTotalPages(pages);
             setCurrentPage(1);
-            setLoadPercent(100);
             setLoading(false);
           }}
           onPageChanged={(page, pages) => {
@@ -196,7 +308,7 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
 
             Alert.alert(
               "PDF Error",
-              "PDF open nahi ho raha. Please retry karo ya PDF URL check karo."
+              "PDF open nahi ho raha. Token ya PDF URL check karo."
             );
           }}
         />
@@ -222,6 +334,7 @@ function Header({
         <Text style={styles.headerTitle} numberOfLines={1}>
           {title}
         </Text>
+
         <Text style={styles.secureText}>Protected PDF Viewer</Text>
       </View>
 
@@ -237,6 +350,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8fafc",
   },
+
   header: {
     height: 64,
     paddingHorizontal: 14,
@@ -246,6 +360,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
+
   backBtn: {
     width: 42,
     height: 42,
@@ -255,20 +370,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
+
   headerTextBox: {
     flex: 1,
   },
+
   headerTitle: {
     fontSize: 17,
     fontWeight: "900",
     color: "#0f172a",
   },
+
   secureText: {
     marginTop: 2,
     fontSize: 11,
     fontWeight: "700",
     color: "#16a34a",
   },
+
   lockBox: {
     width: 34,
     height: 34,
@@ -277,12 +396,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
   actionBar: {
     marginHorizontal: 12,
     marginTop: 10,
     flexDirection: "row",
     alignItems: "center",
   },
+
   pageChip: {
     flex: 1,
     height: 42,
@@ -295,12 +416,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginRight: 10,
   },
+
   pageChipText: {
     marginLeft: 7,
     fontSize: 13,
     fontWeight: "900",
     color: "#1d4ed8",
   },
+
   iconBtn: {
     width: 42,
     height: 42,
@@ -311,6 +434,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
   infoBox: {
     marginHorizontal: 12,
     marginTop: 8,
@@ -322,6 +446,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
+
   infoText: {
     flex: 1,
     marginLeft: 8,
@@ -329,17 +454,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#166534",
   },
+
   pdfWrap: {
     flex: 1,
     marginTop: 8,
     backgroundColor: "#ffffff",
   },
+
   pdf: {
     flex: 1,
     width: "100%",
     height: "100%",
     backgroundColor: "#ffffff",
   },
+
   loader: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 10,
@@ -348,70 +476,95 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
   },
+
+  loaderCircle: {
+    width: 118,
+    height: 118,
+    borderRadius: 59,
+    borderWidth: 5,
+    borderColor: "#dbeafe",
+    borderTopColor: "#2563eb",
+    borderRightColor: "#60a5fa",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  loaderInner: {
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: "#eff6ff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
   loadingTitle: {
-    marginTop: 14,
-    fontSize: 18,
+    marginTop: 22,
+    fontSize: 20,
     fontWeight: "900",
     color: "#0f172a",
   },
-  loadingPercent: {
-    marginTop: 8,
-    fontSize: 34,
-    fontWeight: "900",
-    color: "#2563eb",
-  },
-  progressOuter: {
-    width: "100%",
-    height: 12,
-    borderRadius: 999,
-    backgroundColor: "#e5e7eb",
-    overflow: "hidden",
-    marginTop: 14,
-  },
-  progressInner: {
-    height: "100%",
-    borderRadius: 999,
-    backgroundColor: "#2563eb",
-  },
-  loadingText: {
+
+  dotsRow: {
     marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  dot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#2563eb",
+    marginHorizontal: 4,
+  },
+
+  loadingText: {
+    marginTop: 14,
     fontSize: 13,
     fontWeight: "700",
     color: "#64748b",
     textAlign: "center",
+    lineHeight: 20,
   },
+
   detailBox: {
     width: "100%",
-    marginTop: 18,
+    marginTop: 22,
     padding: 14,
-    borderRadius: 16,
+    borderRadius: 18,
     backgroundColor: "#f8fafc",
     borderWidth: 1,
     borderColor: "#e5e7eb",
   },
+
   detailRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 5,
+    marginVertical: 6,
   },
+
   detailText: {
     marginLeft: 8,
     fontSize: 12,
     fontWeight: "800",
     color: "#475569",
   },
+
   center: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 24,
   },
+
   errorTitle: {
     marginTop: 12,
     fontSize: 20,
     fontWeight: "900",
     color: "#0f172a",
   },
+
   errorText: {
     marginTop: 8,
     fontSize: 13,
@@ -419,6 +572,7 @@ const styles = StyleSheet.create({
     color: "#64748b",
     textAlign: "center",
   },
+
   retryBtn: {
     marginTop: 18,
     height: 44,
@@ -428,6 +582,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+
   retryBtnText: {
     fontSize: 14,
     fontWeight: "900",
