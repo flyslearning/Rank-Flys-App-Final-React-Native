@@ -423,7 +423,7 @@ export default function StudyTechnique() {
           <View style={styles.heroTop}>
             <View>
               <Text style={styles.heroLabel}>Syllabus Completion</Text>
-              <Text style={styles.heroValue}>{completion}%</Text>
+              <Text style={styles.heroValue}>{Number(completion).toFixed(1)}%</Text>
             </View>
 
             <Animated.View
