@@ -1,5 +1,3 @@
-// src/screens/MentorshipScreen.tsx
-
 import React, { useEffect, useRef } from "react";
 import {
   View,

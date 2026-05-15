@@ -421,8 +421,6 @@ export default function MentorshipScreens() {
                 <Text style={styles.discountPillText}>{discountPercent}% OFF</Text>
               </View>
             )}
-
-            <View style={styles.pricePill}>{renderPriceBlock(item, true)}</View>
           </View>
 
           <View style={styles.cardBody}>
@@ -859,15 +857,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "900",
-  },
-  pricePill: {
-    position: "absolute",
-    right: 14,
-    bottom: 14,
-    backgroundColor: "rgba(255,255,255,0.96)",
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: 999,
   },
 
   priceLine: {
