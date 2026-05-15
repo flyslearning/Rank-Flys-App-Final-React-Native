@@ -10,6 +10,7 @@ import { useAuthStore } from "../store/auth.store";
 import { useAppStore } from "../store/app.store";
 
 import IntroSliderScreen from "../screens/extrascreens/IntroSliderScreen";
+import SplashScreen from "../screens/extrascreens/SplashScreen";
 import SendOtpScreen from "../screens/authscreens/SendOtpScreen";
 import VerifyOtpScreen from "../screens/authscreens/VerifyOtpScreen";
 import OnboardingScreen from "../screens/authscreens/OnboardingScreen";
@@ -108,11 +109,16 @@ function BottomTabs() {
   );
 }
 
-export default function RootNavigator() {
-  const accessToken = useAuthStore((s) => s.accessToken);
-  const hasSeenIntro = useAppStore((s) => s.hasSeenIntro);
+    export default function RootNavigator() {
+    const accessToken = useAuthStore((s) => s.accessToken);
+    const isReady = useAuthStore((s) => s.isReady);
+    const hasSeenIntro = useAppStore((s) => s.hasSeenIntro);
 
-  const isLoggedIn = !!accessToken;
+    if (!isReady) {
+      return <SplashScreen />;
+    }
+
+    const isLoggedIn = !!accessToken;
 
   return (
     <NavigationContainer>

@@ -168,7 +168,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
       return Promise.reject(error);
     }
 
-    setTokens(newAccessToken, newRefreshToken);
+    await setTokens(newAccessToken, newRefreshToken);
 
     
     authClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
