@@ -20,13 +20,11 @@ import { TestAPI } from "../../api/test.api";
 import {
   getTestSeriesLocal,
   saveTestSeries,
-  updateTestSeriesCount,
 } from "../../db/testDb";
 
 type Props = NativeStackScreenProps<RootStackParamList, "TestSeries">;
 
 type SeriesWithCount = TestSeries & {
-  testsCount?: number;
   price?: number;
   price_paise?: number;
   original_price_paise?: number;
@@ -86,20 +84,6 @@ export default function TestSeriesScreen({ navigation }: Props) {
     message: "",
   });
 
-  const getSeriesTestsCount = async (seriesId: string) => {
-    try {
-      const res = await TestAPI.getTestsBySeries(seriesId);
-      return res.data?.data?.length || 0;
-    } catch (error: any) {
-      console.log(
-        "Tests count error:",
-        seriesId,
-        error.response?.data || error.message
-      );
-      return 0;
-    }
-  };
-
   const loadSeries = useCallback(async () => {
     try {
       const localData = getTestSeriesLocal() as SeriesWithCount[];
@@ -119,22 +103,9 @@ export default function TestSeriesScreen({ navigation }: Props) {
           new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
 
-      const seriesWithCounts = await Promise.all(
-        sortedSeries.map(async (item: SeriesWithCount) => {
-          const testsCount = await getSeriesTestsCount(item.id);
-
-          return {
-            ...item,
-            testsCount,
-          };
-        })
-      );
+      const seriesWithCounts = sortedSeries;
 
       saveTestSeries(seriesWithCounts);
-
-      for (const item of seriesWithCounts) {
-        updateTestSeriesCount(item.id, item.testsCount || 0);
-      }
 
       const updatedLocalData = getTestSeriesLocal() as SeriesWithCount[];
       setSeries(updatedLocalData);
@@ -287,11 +258,6 @@ export default function TestSeriesScreen({ navigation }: Props) {
               <Text style={styles.discountBadgeText}>{discountPercent}% OFF</Text>
             </View>
           )}
-
-          <View style={styles.testBadge}>
-            <Ionicons name="layers-outline" size={14} color="#ffffff" />
-            <Text style={styles.testBadgeText}>{item.testsCount || 0} Tests</Text>
-          </View>
         </View>
 
         <View style={styles.cardBody}>
@@ -304,10 +270,6 @@ export default function TestSeriesScreen({ navigation }: Props) {
           </Text>
 
           <View style={styles.metaRow}>
-            <View style={styles.miniChip}>
-              <Ionicons name="document-text-outline" size={15} color="#2563eb" />
-              <Text style={styles.miniChipText}>{item.testsCount || 0} Tests</Text>
-            </View>
 
             <View style={styles.miniChip}>
               <Ionicons

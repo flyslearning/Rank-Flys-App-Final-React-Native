@@ -23,7 +23,6 @@ import { EbookDb } from "../../db/ebookDb";
 type Props = NativeStackScreenProps<RootStackParamList, "EbookSeries">;
 
 type EbookSeriesWithCount = EbookSeriesItem & {
-  filesCount?: number;
   price?: number;
   price_paise?: number;
   original_price_paise?: number;
@@ -111,24 +110,6 @@ export default function EbookSeriesScreen({ navigation }: Props) {
     return `₹${Math.round((item.price_paise || 0) / 100)}`;
   };
 
-  const getEbookFilesCount = async (seriesId: string) => {
-    try {
-      const res = await (EbookAPI as any).getNodes(seriesId);
-
-      const nodes = res.data?.data || res.data || [];
-
-      return nodes.filter((node: any) => {
-        return node.type === "file" || node.type === "pdf";
-      }).length;
-    } catch (error: any) {
-      console.log(
-        "Ebook files count error:",
-        seriesId,
-        error?.response?.data || error.message
-      );
-      return 0;
-    }
-  };
 
   const loadSeries = useCallback(async (showLoader = false) => {
     try {
@@ -153,31 +134,7 @@ export default function EbookSeriesScreen({ navigation }: Props) {
           new Date(a.created_at || 0).getTime()
       );
 
-      const seriesWithCounts = await Promise.all(
-        sortedSeries.map(async (item: EbookSeriesWithCount) => {
-          const cachedNodes = EbookDb.getNodes(item.id, null);
-
-          let filesCount = cachedNodes.filter(
-            (node: any) => node.type === "file" || node.type === "pdf"
-          ).length;
-
-          try {
-            const nodeRes = await (EbookAPI as any).getNodes(item.id);
-            const nodes = nodeRes.data?.data || nodeRes.data || [];
-
-            EbookDb.saveNodes(item.id, null, nodes);
-
-            filesCount = nodes.filter((node: any) => {
-              return node.type === "file" || node.type === "pdf";
-            }).length;
-          } catch {}
-
-          return {
-            ...item,
-            filesCount,
-          };
-        })
-      );
+      const seriesWithCounts = sortedSeries;
 
       EbookDb.saveSeries(seriesWithCounts);
       setSeries(seriesWithCounts);
@@ -338,12 +295,6 @@ export default function EbookSeriesScreen({ navigation }: Props) {
             </View>
           )}
 
-          <View style={styles.testBadge}>
-            <Ionicons name="library-outline" size={14} color="#ffffff" />
-            <Text style={styles.testBadgeText}>
-              {item.filesCount || 0} Ebook Files
-            </Text>
-          </View>
         </View>
 
         <View style={styles.cardBody}>
@@ -356,12 +307,6 @@ export default function EbookSeriesScreen({ navigation }: Props) {
           </Text>
 
           <View style={styles.metaRow}>
-            <View style={styles.miniChip}>
-              <Ionicons name="document-text-outline" size={15} color="#2563eb" />
-              <Text style={styles.miniChipText}>
-                {item.filesCount || 0} Files
-              </Text>
-            </View>
 
             <View style={styles.miniChip}>
               <Ionicons
@@ -678,10 +623,9 @@ const styles = StyleSheet.create({
     marginTop: 14,
   },
   miniChip: {
-    flex: 1,
-    height: 40,
-    paddingHorizontal: 12,
-    borderRadius: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 999,
     backgroundColor: "#f1f5f9",
     flexDirection: "row",
     alignItems: "center",

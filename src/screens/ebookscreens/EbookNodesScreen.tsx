@@ -155,11 +155,6 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
     loadNodes(true);
   }, [loadNodes]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadNodes(false);
-    }, [loadNodes])
-  );
 
   const onRefresh = async () => {
     setRefreshing(true);

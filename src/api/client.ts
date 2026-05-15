@@ -149,7 +149,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
     const { refreshToken, setTokens, logout } = useAuthStore.getState();
 
     if (!refreshToken) {
-      logout();
+      await logout();
       return Promise.reject(error);
     }
 
@@ -164,7 +164,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
       response.data.refresh_token || response.data.refreshToken;
 
     if (!newAccessToken || !newRefreshToken) {
-      logout();
+      await logout();
       return Promise.reject(error);
     }
 
@@ -191,12 +191,12 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
     isRefreshing = false;
   }
 };
-export const setAuthToken = (
+export const setAuthToken = async (
   accessToken: string,
   refreshToken?: string
 ) => {
   if (refreshToken) {
-    useAuthStore.getState().setTokens(
+    await useAuthStore.getState().setTokens(
       accessToken,
       refreshToken
     );
