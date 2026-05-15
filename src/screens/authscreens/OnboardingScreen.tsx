@@ -21,7 +21,7 @@ import { RootStackParamList, Goal, ClassItem } from "../../types";
 import AppInput from "../../components/AppInput";
 import AppButton from "../../components/AppButton";
 import { MetaAPI } from "../../api/meta.api";
-import { AuthAPI } from "../../api/auth.api";
+import { AuthAPI, setAuthToken } from "../../api/auth.api";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Onboarding">;
 
@@ -134,22 +134,31 @@ export default function OnboardingScreen({ navigation }: Props) {
         class_id: classId,
       });
 
-      const refreshToken = await AsyncStorage.getItem("refresh_token");
+      const oldRefreshToken = await AsyncStorage.getItem("refresh_token");
 
-      if (refreshToken) {
-        const refreshRes = await AuthAPI.refresh(refreshToken);
+    if (oldRefreshToken) {
+      const refreshRes = await AuthAPI.refresh(oldRefreshToken);
 
-        await AsyncStorage.setItem(
-          "access_token",
-          refreshRes.data.access_token
-        );
+      const newAccessToken =
+        refreshRes.data?.access_token ||
+        refreshRes.data?.accessToken ||
+        refreshRes.data?.data?.access_token ||
+        refreshRes.data?.data?.accessToken;
 
-        await AsyncStorage.setItem(
-          "refresh_token",
-          refreshRes.data.refresh_token
-        );
+      const newRefreshToken =
+        refreshRes.data?.refresh_token ||
+        refreshRes.data?.refreshToken ||
+        refreshRes.data?.data?.refresh_token ||
+        refreshRes.data?.data?.refreshToken ||
+        oldRefreshToken;
+
+      if (newAccessToken) {
+        await AsyncStorage.setItem("access_token", newAccessToken);
+        await AsyncStorage.setItem("refresh_token", newRefreshToken);
+
+        setAuthToken(newAccessToken, newRefreshToken);
       }
-
+    }
       navigation.replace("MainTabs");
     } catch {
       Alert.alert("Profile update failed");

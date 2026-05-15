@@ -1,4 +1,6 @@
-import { authClient } from "./client";
+import { authClient, setAuthToken } from "./client";
+
+export { setAuthToken };
 
 export const AuthAPI = {
   sendOtp(email: string) {

@@ -170,6 +170,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
 
     setTokens(newAccessToken, newRefreshToken);
 
+    
     authClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
     testClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
     ebookClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
@@ -190,6 +191,36 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
     isRefreshing = false;
   }
 };
+export const setAuthToken = (
+  accessToken: string,
+  refreshToken?: string
+) => {
+  if (refreshToken) {
+    useAuthStore.getState().setTokens(
+      accessToken,
+      refreshToken
+    );
+  }
+
+  authClient.defaults.headers.common.Authorization =
+    `Bearer ${accessToken}`;
+
+  testClient.defaults.headers.common.Authorization =
+    `Bearer ${accessToken}`;
+
+  ebookClient.defaults.headers.common.Authorization =
+    `Bearer ${accessToken}`;
+
+  paymentClient.defaults.headers.common.Authorization =
+    `Bearer ${accessToken}`;
+
+  toolClient.defaults.headers.common.Authorization =
+    `Bearer ${accessToken}`;
+
+  mentorshipClient.defaults.headers.common.Authorization =
+    `Bearer ${accessToken}`;
+};
+
 
 const attachRefreshInterceptor = (client: any) => {
   client.interceptors.response.use(

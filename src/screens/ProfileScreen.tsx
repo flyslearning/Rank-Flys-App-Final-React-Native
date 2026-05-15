@@ -18,7 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
-import { AuthAPI } from "../api/auth.api";
+import { AuthAPI, setAuthToken } from "../api/auth.api";
 import { MetaAPI } from "../api/meta.api";
 
 const { width } = Dimensions.get("window");
@@ -76,8 +76,15 @@ export default function ProfileScreen() {
         MetaAPI.getGoals(),
       ]);
 
-      const profileData = profileRes.data?.data || profileRes.data;
-      const goalsData = Array.isArray(goalsRes.data) ? goalsRes.data : [];
+      const profileData =
+        profileRes.data?.profile ||
+        profileRes.data?.data?.profile ||
+        profileRes.data?.data ||
+        {};
+
+      const goalsData = Array.isArray(goalsRes.data)
+        ? goalsRes.data
+        : goalsRes.data?.data || [];
 
       setProfile(profileData);
       setGoals(goalsData);
@@ -85,26 +92,39 @@ export default function ProfileScreen() {
       setFirstName(profileData?.first_name || "");
       setLastName(profileData?.last_name || "");
       setGender(profileData?.gender || "male");
-      setGoalId(profileData?.goal_id || "");
-      setClassId(profileData?.class_id || "");
+
+      const currentGoalId = profileData?.goal_id || "";
+      const currentClassId = profileData?.class_id || "";
+
+      setGoalId(currentGoalId);
+      setClassId(currentClassId);
+
+      setGoalName("");
+      setClassName("");
+      setClasses([]);
 
       const selectedGoal = goalsData.find(
-        (item: Goal) => item.id === profileData?.goal_id
+        (item: Goal) => item.id === currentGoalId
       );
 
       if (selectedGoal) {
         setGoalName(selectedGoal.name);
 
         const classRes = await MetaAPI.getClassesByGoal(selectedGoal.id);
-        const classData = Array.isArray(classRes.data) ? classRes.data : [];
+
+        const classData = Array.isArray(classRes.data)
+          ? classRes.data
+          : classRes.data?.data || [];
 
         setClasses(classData);
 
         const selectedClass = classData.find(
-          (item: ClassItem) => item.id === profileData?.class_id
+          (item: ClassItem) => item.id === currentClassId
         );
 
-        if (selectedClass) setClassName(selectedClass.name);
+        if (selectedClass) {
+          setClassName(selectedClass.name);
+        }
       }
     } catch (error: any) {
       console.log("Profile load error:", error?.response?.data || error.message);
@@ -123,7 +143,10 @@ export default function ProfileScreen() {
       setGoalModal(false);
 
       const res = await MetaAPI.getClassesByGoal(goal.id);
-      const data = Array.isArray(res.data) ? res.data : [];
+
+      const data = Array.isArray(res.data)
+        ? res.data
+        : res.data?.data || [];
 
       setClasses(data);
       setClassModal(true);
@@ -140,50 +163,69 @@ export default function ProfileScreen() {
   };
 
   const saveProfile = async () => {
-  if (!firstName.trim() || !lastName.trim() || !gender || !goalId || !classId) {
-    Alert.alert("Missing Fields", "Please fill all profile details");
-    return;
-  }
-
-  try {
-    setSaving(true);
-
-    await AuthAPI.completeProfile({
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      gender,
-      goal_id: goalId,
-      class_id: classId,
-    });
-
-    // ✅ ONLY REFRESH CALL ADDED
-    const refreshToken = await AsyncStorage.getItem("refresh_token");
-
-    if (refreshToken) {
-      const refreshRes = await AuthAPI.refresh(refreshToken);
-
-      await AsyncStorage.setItem(
-        "access_token",
-        refreshRes.data.access_token
-      );
-
-      await AsyncStorage.setItem(
-        "refresh_token",
-        refreshRes.data.refresh_token
-      );
-      
+    if (!firstName.trim() || !lastName.trim() || !gender || !goalId || !classId) {
+      Alert.alert("Missing Fields", "Please fill all profile details");
+      return;
     }
 
-    Alert.alert("Success", "Profile updated successfully");
-    setEditMode(false);
-    init();
-  } catch (error: any) {
-    console.log("Profile update error:", error?.response?.data || error.message);
-    Alert.alert("Error", "Profile update failed");
-  } finally {
-    setSaving(false);
-  }
-};
+    try {
+      setSaving(true);
+
+      await AuthAPI.completeProfile({
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        gender,
+        goal_id: goalId,
+        class_id: classId,
+      });
+
+      const oldRefreshToken = await AsyncStorage.getItem("refresh_token");
+
+      if (oldRefreshToken) {
+        const refreshRes = await AuthAPI.refresh(oldRefreshToken);
+
+        const newAccessToken =
+          refreshRes.data?.access_token ||
+          refreshRes.data?.accessToken ||
+          refreshRes.data?.data?.access_token ||
+          refreshRes.data?.data?.accessToken;
+
+        const newRefreshToken =
+          refreshRes.data?.refresh_token ||
+          refreshRes.data?.refreshToken ||
+          refreshRes.data?.data?.refresh_token ||
+          refreshRes.data?.data?.refreshToken ||
+          oldRefreshToken;
+
+        if (newAccessToken) {
+          await AsyncStorage.setItem("access_token", newAccessToken);
+          await AsyncStorage.setItem("refresh_token", newRefreshToken);
+
+          setAuthToken(newAccessToken, newRefreshToken);
+        }
+      }
+
+      setProfile((prev: any) => ({
+        ...prev,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        gender,
+        goal_id: goalId,
+        class_id: classId,
+        onboarding_completed: true,
+      }));
+
+      Alert.alert("Success", "Profile updated successfully");
+      setEditMode(false);
+
+      await init();
+    } catch (error: any) {
+      console.log("Profile update error:", error?.response?.data || error.message);
+      Alert.alert("Error", "Profile update failed");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -530,15 +572,10 @@ function ModalHeader({ title, onClose }: { title: string; onClose: () => void })
   );
 }
 
+// styles same as your current file
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
-  screen: {
-    flex: 1,
-    backgroundColor: "#FFFFFF",
-  },
+  safeArea: { flex: 1, backgroundColor: "#FFFFFF" },
+  screen: { flex: 1, backgroundColor: "#FFFFFF" },
   container: {
     paddingHorizontal: isSmall ? 14 : 18,
     paddingTop: Platform.OS === "android" ? 18 : 10,
@@ -587,10 +624,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#BBF7D0",
   },
-  logoImage: {
-    width: 66,
-    height: 66,
-  },
+  logoImage: { width: 66, height: 66 },
   activeBadge: {
     position: "absolute",
     right: 7,
@@ -650,10 +684,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
   },
-  verifyText: {
-    color: "#111827",
-    fontWeight: "900",
-  },
+  verifyText: { color: "#111827", fontWeight: "900" },
   editButton: {
     marginTop: 22,
     height: 52,
@@ -753,10 +784,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 15,
   },
-  genderRow: {
-    flexDirection: "row",
-    gap: 10,
-  },
+  genderRow: { flexDirection: "row", gap: 10 },
   genderChip: {
     flex: 1,
     height: 52,
@@ -776,9 +804,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12,
   },
-  activeGenderText: {
-    color: "#1D4ED8",
-  },
+  activeGenderText: { color: "#1D4ED8" },
   dropdown: {
     height: 56,
     borderRadius: 18,
@@ -797,9 +823,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
   },
-  placeholder: {
-    color: "#9CA3AF",
-  },
+  placeholder: { color: "#9CA3AF" },
   saveButton: {
     marginTop: 26,
     height: 58,
@@ -810,9 +834,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  disabledButton: {
-    opacity: 0.7,
-  },
+  disabledButton: { opacity: 0.7 },
   saveText: {
     color: "#FFFFFF",
     fontWeight: "900",
@@ -831,9 +853,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     maxHeight: "75%",
   },
-  modalContent: {
-    paddingBottom: 6,
-  },
+  modalContent: { paddingBottom: 6 },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -875,9 +895,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 10,
   },
-  selectedModalText: {
-    color: "#1D4ED8",
-  },
+  selectedModalText: { color: "#1D4ED8" },
   emptyText: {
     color: "#6B7280",
     fontWeight: "800",
