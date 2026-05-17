@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
-  Alert,
   AppState,
   Animated,
   Easing,
@@ -18,9 +17,19 @@ import * as ScreenCapture from "expo-screen-capture";
 
 import { RootStackParamList } from "../../types";
 import { useAuthStore } from "../../store/auth.store";
+import { getCachedPdfUrl, deleteCachedPdf } from "../../utils/pdfCache";
 import { AuthAPI } from "../../api/auth.api";
+import CustomAlert from "../extrascreens/CustomAlert";
 
 type Props = NativeStackScreenProps<RootStackParamList, "PdfViewer">;
+
+type AlertState = {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;
+  onConfirm?: () => void;
+};
 
 export default function PdfViewerScreen({ route, navigation }: Props) {
   const { title, fileUrl } = route.params;
@@ -32,20 +41,88 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
   const [currentPage, setCurrentPage] = useState(0);
   const [hiddenForPrivacy, setHiddenForPrivacy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [localPdfUrl, setLocalPdfUrl] = useState<string | null>(null);
+
+  const [alertState, setAlertState] = useState<AlertState>({
+    visible: false,
+    title: "",
+    message: "",
+  });
 
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const dotAnim = useRef(new Animated.Value(0)).current;
 
-  const pdfUrl = useMemo(() => {
-    const separator = fileUrl.includes("?") ? "&" : "?";
-    return `${fileUrl}${separator}v=${Date.now()}-${reloadKey}`;
-  }, [fileUrl, reloadKey]);
+  const showAlert = (
+    title: string,
+    message: string,
+    confirmText = "Got it",
+    onConfirm?: () => void
+  ) => {
+    setAlertState({
+      visible: true,
+      title,
+      message,
+      confirmText,
+      onConfirm,
+    });
+  };
+
+  const closeAlert = () => {
+    setAlertState((prev) => ({
+      ...prev,
+      visible: false,
+    }));
+  };
 
   const isSecurePdf = useMemo(() => {
     const cleanUrl = fileUrl.toLowerCase().split("?")[0];
-    return fileUrl.startsWith("https://") && cleanUrl.endsWith(".pdf");
+
+    return (
+      fileUrl.startsWith("https://") &&
+      cleanUrl.endsWith(".pdf") &&
+      !fileUrl.includes("..") &&
+      !fileUrl.startsWith("file://")
+    );
   }, [fileUrl]);
+
+  useEffect(() => {
+    const preparePdf = async () => {
+      try {
+        setLoading(true);
+
+        if (!isSecurePdf) {
+          setLoading(false);
+          return;
+        }
+
+        if (!accessToken) {
+          setLoading(false);
+          return;
+        }
+
+        const localUrl = await getCachedPdfUrl(fileUrl, accessToken);
+
+        setLocalPdfUrl(localUrl);
+      } catch (error) {
+        console.log("PDF cache error:", error);
+
+        setLoading(false);
+
+        showAlert(
+          "PDF Load Failed",
+          "PDF download/open nahi ho payi. Please internet check karke retry karo.",
+          "Retry",
+          async () => {
+            closeAlert();
+            await handleRetry();
+          }
+        );
+      }
+    };
+
+    preparePdf();
+  }, [fileUrl, accessToken, reloadKey, isSecurePdf]);
 
   useEffect(() => {
     ScreenCapture.preventScreenCaptureAsync().catch(console.log);
@@ -111,11 +188,27 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
     };
   }, [loading, rotateAnim, pulseAnim, dotAnim]);
 
-  const handleRetry = () => {
+  const handleRetry = async () => {
     setLoading(true);
     setTotalPages(0);
     setCurrentPage(0);
+    setLocalPdfUrl(null);
+
+    await deleteCachedPdf(fileUrl);
+
     setReloadKey((prev) => prev + 1);
+  };
+
+  const handleSessionExpired = () => {
+    showAlert(
+      "Session Expired",
+      "Please login again to access this protected PDF.",
+      "Go Back",
+      () => {
+        closeAlert();
+        navigation.goBack();
+      }
+    );
   };
 
   const rotate = rotateAnim.interpolate({
@@ -155,6 +248,15 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
             <Text style={styles.retryBtnText}>Go Back</Text>
           </TouchableOpacity>
         </View>
+
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          confirmText={alertState.confirmText}
+          onClose={closeAlert}
+          onConfirm={alertState.onConfirm}
+        />
       </SafeAreaView>
     );
   }
@@ -178,6 +280,15 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
             <Text style={styles.retryBtnText}>Go Back</Text>
           </TouchableOpacity>
         </View>
+
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          confirmText={alertState.confirmText}
+          onClose={closeAlert}
+          onConfirm={alertState.onConfirm}
+        />
       </SafeAreaView>
     );
   }
@@ -194,6 +305,15 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
             App background me hai, PDF privacy ke liye hidden hai.
           </Text>
         </View>
+
+        <CustomAlert
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          confirmText={alertState.confirmText}
+          onClose={closeAlert}
+          onConfirm={alertState.onConfirm}
+        />
       </SafeAreaView>
     );
   }
@@ -222,7 +342,7 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
       <View style={styles.infoBox}>
         <Ionicons name="shield-checkmark-outline" size={16} color="#16a34a" />
         <Text style={styles.infoText}>
-          Secure PDF viewer enabled. Zoom aur swipe pages available hai.
+          Secure PDF viewer enabled. Screenshot protection active.
         </Text>
       </View>
 
@@ -273,59 +393,65 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
           </View>
         )}
 
-        <Pdf
-          key={reloadKey}
-          source={{
-            uri: pdfUrl,
-            cache: false,
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              Accept: "application/pdf",
-            },
-          }}
-          trustAllCerts={false}
-          enablePaging={true}
-          horizontal={false}
-          spacing={4}
-          fitPolicy={0}
-          minScale={1}
-          maxScale={3}
-          style={styles.pdf}
-          onLoadProgress={() => {
-            setLoading(true);
-          }}
-          onLoadComplete={(pages) => {
-            setTotalPages(pages);
-            setCurrentPage(1);
-            setLoading(false);
-          }}
-          onPageChanged={(page, pages) => {
-            setCurrentPage(page);
-            setTotalPages(pages);
-          }}
+        {localPdfUrl && (
+          <View style={styles.securePdfContainer}>
+            <Pdf
+              key={`${reloadKey}-${localPdfUrl}`}
+              source={{
+                uri: localPdfUrl,
+                cache: true,
+              }}
+              trustAllCerts={false}
+              enablePaging={true}
+              horizontal={false}
+              spacing={4}
+              fitPolicy={0}
+              minScale={1}
+              maxScale={3}
+              style={styles.pdf}
+              onLoadProgress={() => {
+                setLoading(true);
+              }}
+              onLoadComplete={(pages) => {
+                setTotalPages(pages);
+                setCurrentPage(1);
+                setLoading(false);
+              }}
+              onPageChanged={(page, pages) => {
+                setCurrentPage(page);
+                setTotalPages(pages);
+              }}
+              onError={async (error) => {
+                console.log("PDF load error:", error);
 
-          onError={async (error) => {
-          console.log("PDF load error:", error);
+                try {
+                  setLoading(true);
 
-          try {
-            setLoading(true);
+                  await deleteCachedPdf(fileUrl);
+                  await AuthAPI.validate();
 
-            await AuthAPI.validate();
-
-            setTotalPages(0);
-            setCurrentPage(0);
-            setReloadKey((prev) => prev + 1);
-          } catch (refreshError) {
-            setLoading(false);
-
-            Alert.alert(
-              "Session Expired",
-              "Please login again."
-            );
-          }
-        }}
-        />
+                  setTotalPages(0);
+                  setCurrentPage(0);
+                  setLocalPdfUrl(null);
+                  setReloadKey((prev) => prev + 1);
+                } catch (refreshError) {
+                  setLoading(false);
+                  handleSessionExpired();
+                }
+              }}
+            />
+          </View>
+        )}
       </View>
+
+      <CustomAlert
+        visible={alertState.visible}
+        title={alertState.title}
+        message={alertState.message}
+        confirmText={alertState.confirmText}
+        onClose={closeAlert}
+        onConfirm={alertState.onConfirm}
+      />
     </SafeAreaView>
   );
 }
@@ -471,6 +597,12 @@ const styles = StyleSheet.create({
   pdfWrap: {
     flex: 1,
     marginTop: 8,
+    backgroundColor: "#ffffff",
+  },
+
+  securePdfContainer: {
+    flex: 1,
+    position: "relative",
     backgroundColor: "#ffffff",
   },
 

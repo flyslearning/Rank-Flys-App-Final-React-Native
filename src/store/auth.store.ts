@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { storage } from "../utils/storage";
+import { clearAllCachedPdfs } from "../utils/pdfCache";
 
 type AuthState = {
   accessToken: string | null;
@@ -67,6 +68,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
+    await clearAllCachedPdfs();
     await storage.remove("access_token");
     await storage.remove("refresh_token");
 
