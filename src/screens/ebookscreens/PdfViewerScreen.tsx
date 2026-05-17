@@ -18,6 +18,7 @@ import * as ScreenCapture from "expo-screen-capture";
 
 import { RootStackParamList } from "../../types";
 import { useAuthStore } from "../../store/auth.store";
+import { AuthAPI } from "../../api/auth.api";
 
 type Props = NativeStackScreenProps<RootStackParamList, "PdfViewer">;
 
@@ -302,15 +303,27 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
             setCurrentPage(page);
             setTotalPages(pages);
           }}
-          onError={(error) => {
+
+          onError={async (error) => {
+          console.log("PDF load error:", error);
+
+          try {
+            setLoading(true);
+
+            await AuthAPI.validate();
+
+            setTotalPages(0);
+            setCurrentPage(0);
+            setReloadKey((prev) => prev + 1);
+          } catch (refreshError) {
             setLoading(false);
-            console.log("PDF load error:", error);
 
             Alert.alert(
-              "PDF Error",
-              "PDF open nahi ho raha. Token ya PDF URL check karo."
+              "Session Expired",
+              "Please login again."
             );
-          }}
+          }
+        }}
         />
       </View>
     </SafeAreaView>

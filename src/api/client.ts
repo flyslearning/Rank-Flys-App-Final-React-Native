@@ -1,4 +1,8 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
+import axios, {
+  AxiosError,
+  AxiosInstance,
+  InternalAxiosRequestConfig,
+} from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuthStore } from "../store/auth.store";
 
@@ -8,7 +12,6 @@ export const EBOOK_BASE_URL = process.env.EXPO_PUBLIC_EBOOK_API;
 export const PAYMENT_BASE_URL = process.env.EXPO_PUBLIC_PAYMENT_API;
 export const TOOL_BASE_URL = process.env.EXPO_PUBLIC_TOOL_API;
 export const MENTORSHIP_BASE_URL = process.env.EXPO_PUBLIC_MENTORSHIP_API;
-
 
 export const storage = {
   async get<T>(key: string): Promise<T | null> {
@@ -35,9 +38,9 @@ export const storage = {
   },
 
   async clear() {
-  console.warn("storage.clear() disabled to protect intro_seen");
+    console.warn("storage.clear() disabled to protect intro_seen");
   },
-  };
+};
 
 export const authClient = axios.create({
   baseURL: AUTH_BASE_URL,
@@ -46,6 +49,7 @@ export const authClient = axios.create({
     "Content-Type": "application/json",
   },
 });
+
 export const toolClient = axios.create({
   baseURL: TOOL_BASE_URL,
   timeout: 15000,
@@ -53,6 +57,7 @@ export const toolClient = axios.create({
     "Content-Type": "application/json",
   },
 });
+
 export const mentorshipClient = axios.create({
   baseURL: MENTORSHIP_BASE_URL,
   timeout: 15000,
@@ -76,6 +81,7 @@ export const ebookClient = axios.create({
     "Content-Type": "application/json",
   },
 });
+
 export const paymentClient = axios.create({
   baseURL: PAYMENT_BASE_URL,
   timeout: 15000,
@@ -84,7 +90,7 @@ export const paymentClient = axios.create({
   },
 });
 
-// Important: refresh ke liye raw client
+// Refresh ke liye raw client, isme interceptor nahi lagana
 const refreshClient = axios.create({
   baseURL: AUTH_BASE_URL,
   timeout: 15000,
@@ -93,8 +99,13 @@ const refreshClient = axios.create({
   },
 });
 
+type RetryConfig = InternalAxiosRequestConfig & {
+  _retry?: boolean;
+  _client?: AxiosInstance;
+};
 
 let isRefreshing = false;
+
 let failedQueue: {
   resolve: (token: string) => void;
   reject: (error: any) => void;
@@ -112,18 +123,32 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
-const attachToken = (config: InternalAxiosRequestConfig) => {
+const attachToken = (
+  config: InternalAxiosRequestConfig,
+  client: AxiosInstance
+) => {
   const token = useAuthStore.getState().accessToken;
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
+  (config as RetryConfig)._client = client;
+
   return config;
 };
 
+const setDefaultAuthorizationHeader = (accessToken: string) => {
+  authClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+  testClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+  ebookClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+  paymentClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+  toolClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+  mentorshipClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+};
+
 const refreshTokenAndRetry = async (error: AxiosError) => {
-  const originalRequest: any = error.config;
+  const originalRequest = error.config as RetryConfig | undefined;
 
   if (!originalRequest || originalRequest._retry) {
     return Promise.reject(error);
@@ -136,7 +161,9 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
       failedQueue.push({
         resolve: (token: string) => {
           originalRequest.headers.Authorization = `Bearer ${token}`;
-          resolve(axios(originalRequest));
+
+          const client = originalRequest._client || authClient;
+          resolve(client(originalRequest));
         },
         reject,
       });
@@ -170,63 +197,43 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
 
     await setTokens(newAccessToken, newRefreshToken);
 
-    
-    authClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
-    testClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
-    ebookClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
-    paymentClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
-    toolClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
-    mentorshipClient.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
+    setDefaultAuthorizationHeader(newAccessToken);
 
     processQueue(null, newAccessToken);
 
     originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
 
-    return axios(originalRequest);
+    const client = originalRequest._client || authClient;
+
+    return client(originalRequest);
   } catch (refreshError) {
     processQueue(refreshError, null);
-    useAuthStore.getState().logout();
+    await useAuthStore.getState().logout();
     return Promise.reject(refreshError);
   } finally {
     isRefreshing = false;
   }
 };
+
 export const setAuthToken = async (
   accessToken: string,
   refreshToken?: string
 ) => {
   if (refreshToken) {
-    await useAuthStore.getState().setTokens(
-      accessToken,
-      refreshToken
-    );
+    await useAuthStore.getState().setTokens(accessToken, refreshToken);
   }
 
-  authClient.defaults.headers.common.Authorization =
-    `Bearer ${accessToken}`;
-
-  testClient.defaults.headers.common.Authorization =
-    `Bearer ${accessToken}`;
-
-  ebookClient.defaults.headers.common.Authorization =
-    `Bearer ${accessToken}`;
-
-  paymentClient.defaults.headers.common.Authorization =
-    `Bearer ${accessToken}`;
-
-  toolClient.defaults.headers.common.Authorization =
-    `Bearer ${accessToken}`;
-
-  mentorshipClient.defaults.headers.common.Authorization =
-    `Bearer ${accessToken}`;
+  setDefaultAuthorizationHeader(accessToken);
 };
 
-
-const attachRefreshInterceptor = (client: any) => {
+const attachRefreshInterceptor = (client: AxiosInstance) => {
   client.interceptors.response.use(
-    (response: any) => response,
+    (response) => response,
     async (error: AxiosError) => {
-      if (error.response?.status === 401) {
+      if (
+        error.response?.status === 401 ||
+        error.response?.status === 403
+      ) {
         return refreshTokenAndRetry(error);
       }
 
@@ -235,13 +242,29 @@ const attachRefreshInterceptor = (client: any) => {
   );
 };
 
-authClient.interceptors.request.use(attachToken);
-testClient.interceptors.request.use(attachToken);
-ebookClient.interceptors.request.use(attachToken);
-paymentClient.interceptors.request.use(attachToken);
-toolClient.interceptors.request.use(attachToken);
-mentorshipClient.interceptors.request.use(attachToken);
+authClient.interceptors.request.use((config) =>
+  attachToken(config, authClient)
+);
 
+testClient.interceptors.request.use((config) =>
+  attachToken(config, testClient)
+);
+
+ebookClient.interceptors.request.use((config) =>
+  attachToken(config, ebookClient)
+);
+
+paymentClient.interceptors.request.use((config) =>
+  attachToken(config, paymentClient)
+);
+
+toolClient.interceptors.request.use((config) =>
+  attachToken(config, toolClient)
+);
+
+mentorshipClient.interceptors.request.use((config) =>
+  attachToken(config, mentorshipClient)
+);
 
 attachRefreshInterceptor(authClient);
 attachRefreshInterceptor(testClient);
