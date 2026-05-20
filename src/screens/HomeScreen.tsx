@@ -35,29 +35,6 @@ export default function HomeScreen({ navigation }: any) {
       >
         <ContinueLearningCard />
 
-        <Pressable
-          style={styles.studyRoomCard}
-          onPress={() => navigation.navigate("StudyRoom")}
-        >
-          <View style={styles.studyLeft}>
-            <View style={styles.studyIconBox}>
-              <Ionicons name="timer-outline" size={28} color="#FFFFFF" />
-            </View>
-
-            <View style={styles.studyTextBox}>
-              <Text style={styles.studyTag}>LIVE FOCUS MODE</Text>
-              <Text style={styles.studyTitle}>Focus Study Room</Text>
-              <Text style={styles.studySubtitle}>
-                Join live study room, start timer & see students studying now.
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.studyArrowBox}>
-            <Ionicons name="chevron-forward" size={22} color="#FFFFFF" />
-          </View>
-        </Pressable>
-
         <View style={styles.quickSection}>
           <SectionTitle title="Quick Actions" subtitle="Start learning instantly" />
 
@@ -81,6 +58,51 @@ export default function HomeScreen({ navigation }: any) {
             />
           </View>
         </View>
+
+        <Pressable
+          style={styles.studyRoomCard}
+          onPress={() => navigation.navigate("StudyRoom")}
+        >
+          <View style={styles.studyTop}>
+            <View style={styles.studyIconBox}>
+              <Ionicons name="radio-outline" size={27} color="#22C55E" />
+            </View>
+
+            <View style={styles.studyTextBox}>
+              <View style={styles.liveRow}>
+                <View style={styles.liveDot} />
+                <Text style={styles.studyTag}>LIVE FOCUS MODE</Text>
+              </View>
+
+              <Text style={styles.studyTitle}>Study Room</Text>
+
+              <Text style={styles.studySubtitle}>
+                Join live study room, start timer and stay focused with other students.
+              </Text>
+            </View>
+
+            <View style={styles.studyArrowBox}>
+              <Ionicons name="chevron-forward" size={21} color="#2563EB" />
+            </View>
+          </View>
+
+          <View style={styles.studyBottom}>
+            <View style={styles.studyMiniItem}>
+              <Ionicons name="timer-outline" size={15} color="#2563EB" />
+              <Text style={styles.studyMiniText}>Live Timer</Text>
+            </View>
+
+            <View style={styles.studyMiniItem}>
+              <Ionicons name="people-outline" size={15} color="#22C55E" />
+              <Text style={styles.studyMiniText}>Active Students</Text>
+            </View>
+
+            <View style={styles.studyMiniItem}>
+              <Ionicons name="flame-outline" size={15} color="#F59E0B" />
+              <Text style={styles.studyMiniText}>Focus Mode</Text>
+            </View>
+          </View>
+        </Pressable>
 
         <View style={styles.toolsSoftWrap}>
           <Tools navigation={navigation} />
@@ -160,76 +182,6 @@ const styles = StyleSheet.create({
     paddingBottom: 42,
   },
 
-  studyRoomCard: {
-    marginTop: 8,
-    marginBottom: 18,
-    borderRadius: 30,
-    padding: 18,
-    backgroundColor: "#111827",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    shadowColor: "#111827",
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 7,
-    borderWidth: 1,
-    borderColor: "#1F2937",
-  },
-
-  studyLeft: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  studyIconBox: {
-    width: 62,
-    height: 62,
-    borderRadius: 24,
-    backgroundColor: "#22C55E",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
-  },
-
-  studyTextBox: {
-    flex: 1,
-  },
-
-  studyTag: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#86EFAC",
-    letterSpacing: 0.8,
-    marginBottom: 5,
-  },
-
-  studyTitle: {
-    fontSize: 19,
-    fontWeight: "900",
-    color: "#FFFFFF",
-  },
-
-  studySubtitle: {
-    marginTop: 5,
-    fontSize: 12.5,
-    fontWeight: "700",
-    color: "#CBD5E1",
-    lineHeight: 17,
-  },
-
-  studyArrowBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 15,
-    backgroundColor: "rgba(255,255,255,0.13)",
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 10,
-  },
-
   quickSection: {
     marginTop: -10,
   },
@@ -239,6 +191,108 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "space-between",
     marginBottom: 4,
+  },
+
+  studyRoomCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 28,
+    padding: 16,
+    marginTop: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#DCEBFF",
+    shadowColor: "#2563EB",
+    shadowOpacity: 0.09,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+
+  studyTop: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  studyIconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 22,
+    backgroundColor: "#F0FDF4",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    marginRight: 14,
+  },
+
+  studyTextBox: {
+    flex: 1,
+  },
+
+  liveRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 5,
+  },
+
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#22C55E",
+    marginRight: 7,
+  },
+
+  studyTag: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#22C55E",
+    letterSpacing: 0.7,
+  },
+
+  studyTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#0F172A",
+  },
+
+  studySubtitle: {
+    marginTop: 5,
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#64748B",
+    lineHeight: 18,
+  },
+
+  studyArrowBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 15,
+    backgroundColor: "#EFF6FF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
+  },
+
+  studyBottom: {
+    marginTop: 15,
+    paddingTop: 13,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+
+  studyMiniItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  studyMiniText: {
+    marginLeft: 5,
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#475569",
   },
 
   toolsSoftWrap: {

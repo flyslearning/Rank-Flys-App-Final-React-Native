@@ -183,10 +183,9 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
   isRefreshing = true;
 
   try {
-    const { refreshToken, setTokens, logout } = useAuthStore.getState();
+    const { refreshToken, setTokens } = useAuthStore.getState();
 
     if (!refreshToken) {
-      await logout();
       return Promise.reject(error);
     }
 
@@ -195,15 +194,16 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
     });
 
     const newAccessToken =
-      response.data.access_token || response.data.accessToken;
+    response.data.access_token || response.data.accessToken;
 
-    const newRefreshToken =
-      response.data.refresh_token || response.data.refreshToken;
+  const newRefreshToken =
+    response.data.refresh_token ||
+    response.data.refreshToken ||
+    refreshToken;
 
-    if (!newAccessToken || !newRefreshToken) {
-      await logout();
-      return Promise.reject(error);
-    }
+  if (!newAccessToken) {
+    return Promise.reject(error);
+  }
 
     await setTokens(newAccessToken, newRefreshToken);
 
@@ -217,13 +217,15 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
 
     return client(originalRequest);
   } catch (refreshError) {
-    processQueue(refreshError, null);
-    await useAuthStore.getState().logout();
-    return Promise.reject(refreshError);
+  processQueue(refreshError, null);
+
+  console.log("REFRESH TOKEN ERROR", refreshError);
+
+  return Promise.reject(refreshError);
   } finally {
     isRefreshing = false;
   }
-};
+  };
 
 export const setAuthToken = async (
   accessToken: string,

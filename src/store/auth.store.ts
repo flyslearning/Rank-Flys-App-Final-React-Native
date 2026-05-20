@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { storage } from "../utils/storage";
 import { clearAllCachedPdfs } from "../utils/pdfCache";
+import { AUTH_BASE_URL } from "../api/client";
 
 type AuthState = {
   accessToken: string | null;
@@ -15,6 +16,7 @@ type AuthState = {
   loadTokens: () => Promise<void>;
   clearTokens: () => Promise<void>;
   logout: () => Promise<void>;
+  refreshAccessToken: () => Promise<string | null>;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -99,7 +101,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
-  logout: async () => {
+    logout: async () => {
     await clearAllCachedPdfs();
 
     await storage.remove("access_token");
@@ -113,5 +115,52 @@ export const useAuthStore = create<AuthState>((set) => ({
       isReady: true,
       isAuthenticated: false,
     });
+  },
+
+  refreshAccessToken: async () => {
+    const refreshToken = await storage.get<string>("refresh_token");
+
+    if (!refreshToken) {
+      return null;
+    }
+
+    try {
+      const res = await fetch(`${AUTH_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          refresh_token: refreshToken,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        return null;
+      }
+
+      const newAccessToken = data.access_token || data.accessToken;
+      const newRefreshToken = data.refresh_token || data.refreshToken;
+
+      if (!newAccessToken || !newRefreshToken) {
+        return null;
+      }
+
+      await storage.set("access_token", newAccessToken);
+      await storage.set("refresh_token", newRefreshToken);
+
+      set({
+        accessToken: newAccessToken,
+        refreshToken: newRefreshToken,
+        isReady: true,
+        isAuthenticated: true,
+      });
+
+      return newAccessToken;
+    } catch {
+      return null;
+    }
   },
 }));

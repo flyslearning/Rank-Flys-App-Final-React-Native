@@ -31,36 +31,50 @@ const images = [
   require("../../assets/Ads/7.png"),
 ];
 
-const sliderImages = [
-  images[images.length - 1],
-  ...images,
-  images[0],
-];
+const sliderImages = [images[images.length - 1], ...images, images[0]];
 
 export default function ContinueLearningCard({ onPress }: Props) {
   const flatListRef = useRef<FlatList>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const currentIndexRef = useRef(1);
 
-  useEffect(() => {
-    setTimeout(() => {
+  const safeScrollToIndex = (
+    index: number,
+    animated: boolean
+  ) => {
+    if (!sliderImages.length) return;
+
+    const safeIndex = Math.min(
+      Math.max(index, 0),
+      sliderImages.length - 1
+    );
+
+    try {
       flatListRef.current?.scrollToIndex({
-        index: 1,
-        animated: false,
+        index: safeIndex,
+        animated,
       });
+    } catch {}
+  };
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      safeScrollToIndex(1, false);
     }, 50);
+
+    return () => clearTimeout(timeout);
   }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
       const nextIndex = currentIndexRef.current + 1;
 
-      flatListRef.current?.scrollToIndex({
-        index: nextIndex,
-        animated: true,
-      });
+      safeScrollToIndex(nextIndex, true);
 
-      currentIndexRef.current = nextIndex;
+      currentIndexRef.current = Math.min(
+        nextIndex,
+        sliderImages.length - 1
+      );
     }, 3000);
 
     return () => clearInterval(interval);
@@ -75,24 +89,22 @@ export default function ContinueLearningCard({ onPress }: Props) {
 
     if (index === 0) {
       index = images.length;
-
-      flatListRef.current?.scrollToIndex({
-        index,
-        animated: false,
-      });
+      safeScrollToIndex(index, false);
     }
 
     if (index === sliderImages.length - 1) {
       index = 1;
-
-      flatListRef.current?.scrollToIndex({
-        index,
-        animated: false,
-      });
+      safeScrollToIndex(index, false);
     }
 
     currentIndexRef.current = index;
-    setActiveIndex(index - 1);
+
+    const realIndex = Math.max(
+      0,
+      Math.min(index - 1, images.length - 1)
+    );
+
+    setActiveIndex(realIndex);
   };
 
   return (
@@ -111,6 +123,16 @@ export default function ContinueLearningCard({ onPress }: Props) {
           offset: SLIDER_WIDTH * index,
           index,
         })}
+        onScrollToIndexFailed={(info) => {
+          const safeIndex = Math.min(
+            Math.max(info.index, 0),
+            sliderImages.length - 1
+          );
+
+          setTimeout(() => {
+            safeScrollToIndex(safeIndex, true);
+          }, 100);
+        }}
         renderItem={({ item }) => (
           <Pressable style={styles.slide} onPress={onPress}>
             <Image source={item} style={styles.image} resizeMode="cover" />

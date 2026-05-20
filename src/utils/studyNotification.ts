@@ -6,8 +6,10 @@ import notifee, {
 const CHANNEL_ID = "study-room";
 const NOTIFICATION_ID = "study-room-active";
 
-let timerInterval: any = null;
+let timerInterval: ReturnType<typeof setInterval> | null = null;
 let startedAt = 0;
+let currentName = "Student";
+let isRunning = false;
 
 function formatTime(sec: number) {
   const h = String(Math.floor(sec / 3600)).padStart(2, "0");
@@ -21,22 +23,20 @@ async function createStudyChannel() {
   await notifee.createChannel({
     id: CHANNEL_ID,
     name: "Study Room",
-    importance: AndroidImportance.HIGH,
+    importance: AndroidImportance.LOW,
     visibility: AndroidVisibility.PUBLIC,
     sound: undefined,
+    vibration: false,
   });
 }
 
-export async function startStudyNotification(name: string, startTime: number) {
-  startedAt = startTime;
-
-  await notifee.requestPermission();
-  await createStudyChannel();
+async function showStudyNotification() {
+  const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
 
   await notifee.displayNotification({
     id: NOTIFICATION_ID,
     title: "Focus Study Room Active",
-    body: `${name} studying • 00:00:00`,
+    body: `${currentName} studying • ${formatTime(seconds)}`,
     android: {
       channelId: CHANNEL_ID,
       asForegroundService: true,
@@ -49,39 +49,46 @@ export async function startStudyNotification(name: string, startTime: number) {
       },
     },
   });
+}
+
+export async function startStudyNotification(name: string, startTime: number) {
+  currentName = name || "Student";
+  startedAt = startTime || Date.now();
+
+  if (isRunning) {
+    await showStudyNotification();
+    return;
+  }
+
+  isRunning = true;
+
+  await notifee.requestPermission();
+  await createStudyChannel();
+  await showStudyNotification();
 
   if (timerInterval) {
     clearInterval(timerInterval);
   }
 
-  timerInterval = setInterval(async () => {
-    const seconds = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
-
-    await notifee.displayNotification({
-      id: NOTIFICATION_ID,
-      title: "Focus Study Room Active",
-      body: `${name} studying • ${formatTime(seconds)}`,
-      android: {
-        channelId: CHANNEL_ID,
-        asForegroundService: true,
-        ongoing: true,
-        autoCancel: false,
-        onlyAlertOnce: true,
-        smallIcon: "ic_launcher",
-        pressAction: {
-          id: "default",
-        },
-      },
-    });
-  }, 1000);
+  // 1 second update heavy hota hai. 15 sec is production safe.
+  timerInterval = setInterval(() => {
+    showStudyNotification().catch(() => {});
+  }, 15000);
 }
 
 export async function stopStudyNotification() {
+  isRunning = false;
+
   if (timerInterval) {
     clearInterval(timerInterval);
     timerInterval = null;
   }
 
-  await notifee.stopForegroundService();
-  await notifee.cancelNotification(NOTIFICATION_ID);
+  try {
+    await notifee.stopForegroundService();
+  } catch {}
+
+  try {
+    await notifee.cancelNotification(NOTIFICATION_ID);
+  } catch {}
 }

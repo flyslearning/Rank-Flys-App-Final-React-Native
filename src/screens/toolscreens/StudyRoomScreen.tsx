@@ -66,6 +66,10 @@ async function readJson(res: Response) {
   }
 }
 
+function isUnauthorized(text: string) {
+  return text.includes("401") || text.includes("Unauthorized") || text.includes("unauthorized");
+}
+
 function formatStudyTime(sec: number) {
   const h = String(Math.floor(sec / 3600)).padStart(2, "0");
   const m = String(Math.floor((sec % 3600) / 60)).padStart(2, "0");
@@ -142,19 +146,23 @@ export default function StudyRoomScreen() {
   const socketOpening = useRef(false);
   const studyTimerRef = useRef<any>(null);
   const isStudyingRef = useRef(false);
-  const startedAtRef = useRef<number>(0);
 
   const pulse = useRef(new Animated.Value(1)).current;
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(18)).current;
 
-  const wsUrl = useMemo(() => {
-    return `${CHAT_WS}/ws/${encodeURIComponent(goalClassID)}?token=${encodeURIComponent(
-      token
-    )}`;
-  }, [goalClassID, token]);
-
   const previewUsers = useMemo(() => studyUsers.slice(0, 4), [studyUsers]);
+
+  const getCurrentToken = useCallback(() => {
+    const state: any = useAuthStore.getState();
+    return state.accessToken || token;
+  }, [token]);
+
+  const refreshTokenOnlyWhenNeeded = useCallback(async () => {
+    const state: any = useAuthStore.getState();
+    const fresh = await state.refreshAccessToken?.();
+    return fresh || null;
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -198,20 +206,46 @@ export default function StudyRoomScreen() {
   }, [isStudying, pulse]);
 
   const joinChat = useCallback(async () => {
-    const res = await fetch(`${CHAT_API}/join`, {
+    let currentToken = getCurrentToken();
+
+    if (!currentToken) {
+      throw new Error("No token");
+    }
+
+    let res = await fetch(`${CHAT_API}/join`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${currentToken}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ goal_class_id: goalClassID }),
     });
 
-    const body = await readJson(res);
+    let body = await readJson(res);
+
+    if (res.status === 401) {
+      const freshToken = await refreshTokenOnlyWhenNeeded();
+
+      if (!freshToken) {
+        throw new Error("Token refresh failed");
+      }
+
+      res = await fetch(`${CHAT_API}/join`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${freshToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ goal_class_id: goalClassID }),
+      });
+
+      body = await readJson(res);
+    }
+
     if (!res.ok) {
       throw new Error(`Join failed ${res.status}: ${JSON.stringify(body)}`);
     }
-  }, [goalClassID, token]);
+  }, [goalClassID, getCurrentToken, refreshTokenOnlyWhenNeeded]);
 
   const sendWs = useCallback((payload: any) => {
     const ws = wsRef.current;
@@ -234,7 +268,6 @@ export default function StudyRoomScreen() {
   const startTimerFrom = useCallback(
     (startTime: number) => {
       stopTimer();
-      startedAtRef.current = startTime;
 
       const update = () => {
         const sec = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
@@ -276,108 +309,141 @@ export default function StudyRoomScreen() {
     []
   );
 
-  const connectSocket = useCallback(() => {
-    if (!token || !goalClassID) {
-      setStatus("offline");
-      setLoading(false);
-      return;
-    }
+  const connectSocket = useCallback(
+    async (forceToken?: string) => {
+      const currentToken = forceToken || getCurrentToken();
 
-    const current = wsRef.current;
-
-    if (current?.readyState === WebSocket.OPEN) {
-      setStatus("connected");
-      setLoading(false);
-      return;
-    }
-
-    if (current?.readyState === WebSocket.CONNECTING || socketOpening.current) {
-      setLoading(false);
-      return;
-    }
-
-    socketOpening.current = true;
-    manualClose.current = false;
-
-    setStatus(reconnectAttempt.current > 0 ? "reconnecting" : "connecting");
-
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      if (!mounted.current || wsRef.current !== ws) return;
-
-      socketOpening.current = false;
-      reconnectAttempt.current = 0;
-      setStatus("connected");
-      setLoading(false);
-
-      if (isStudyingRef.current) {
-        sendWs({
-          event: "study_start",
-          dp: userDp,
-        });
-      }
-    };
-
-    ws.onmessage = (event) => {
-      if (!mounted.current || wsRef.current !== ws) return;
-
-      try {
-        const data = JSON.parse(event.data);
-        const eventName = data?.event;
-
-        if (eventName === "study_count_update") {
-          const users = Array.isArray(data?.study?.users) ? data.study.users : [];
-
-          setStudyCount(Number(data?.study?.count || 0));
-          setStudyUsers(users);
-
-          const me = users.find((u: StudyUser) => String(u.user_id) === myUserID);
-
-          if (me?.started_at && isStudyingRef.current) {
-            const serverStart = Number(me.started_at) * 1000;
-            startTimerFrom(serverStart);
-          }
-        }
-      } catch {}
-    };
-
-    ws.onerror = () => {
-      if (!mounted.current) return;
-      setLoading(false);
-    };
-
-    ws.onclose = (e: any) => {
-      if (!mounted.current || wsRef.current !== ws) return;
-
-      wsRef.current = null;
-      socketOpening.current = false;
-      setLoading(false);
-
-      if (manualClose.current) return;
-
-      reconnectAttempt.current += 1;
-      setStatus("reconnecting");
-
-      const reason = String(e?.reason || "");
-      if (
-        reason.includes("400") ||
-        reason.includes("Bad Request") ||
-        reason.includes("401") ||
-        reason.includes("Unauthorized")
-      ) {
+      if (!currentToken || !goalClassID) {
         setStatus("offline");
+        setLoading(false);
         return;
       }
 
-      const delay = Math.min(1000 * reconnectAttempt.current, 5000);
+      const current = wsRef.current;
 
-      reconnectTimer.current = setTimeout(() => {
-        if (mounted.current) connectSocket();
-      }, delay);
-    };
-  }, [token, goalClassID, wsUrl, myUserID, startTimerFrom, sendWs, userDp]);
+      if (current?.readyState === WebSocket.OPEN) {
+        setStatus("connected");
+        setLoading(false);
+        return;
+      }
+
+      if (current?.readyState === WebSocket.CONNECTING || socketOpening.current) {
+        setLoading(false);
+        return;
+      }
+
+      socketOpening.current = true;
+      manualClose.current = false;
+
+      setStatus(reconnectAttempt.current > 0 ? "reconnecting" : "connecting");
+
+      const freshWsUrl = `${CHAT_WS}/ws/${encodeURIComponent(
+        goalClassID
+      )}?token=${encodeURIComponent(currentToken)}`;
+
+      const ws = new WebSocket(freshWsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (!mounted.current || wsRef.current !== ws) return;
+
+        socketOpening.current = false;
+        reconnectAttempt.current = 0;
+        setStatus("connected");
+        setLoading(false);
+
+        if (isStudyingRef.current) {
+          sendWs({
+            event: "study_start",
+            dp: userDp,
+          });
+        }
+      };
+
+      ws.onmessage = (event) => {
+        if (!mounted.current || wsRef.current !== ws) return;
+
+        try {
+          const data = JSON.parse(event.data);
+          const eventName = data?.event;
+
+          if (eventName === "study_count_update") {
+            const users = Array.isArray(data?.study?.users) ? data.study.users : [];
+
+            setStudyCount(Number(data?.study?.count || 0));
+            setStudyUsers(users);
+
+            const me = users.find(
+              (u: StudyUser) => String(u.user_id) === myUserID
+            );
+
+            if (me?.started_at && isStudyingRef.current) {
+              const serverStart = Number(me.started_at) * 1000;
+              startTimerFrom(serverStart);
+            }
+          }
+        } catch {}
+      };
+
+      ws.onerror = () => {
+        if (!mounted.current) return;
+        socketOpening.current = false;
+        setLoading(false);
+      };
+
+      ws.onclose = async (e: any) => {
+        if (!mounted.current || wsRef.current !== ws) return;
+
+        wsRef.current = null;
+        socketOpening.current = false;
+        setLoading(false);
+
+        if (manualClose.current) return;
+
+        reconnectAttempt.current += 1;
+        setStatus("reconnecting");
+
+        const reason = String(e?.reason || "");
+        const code = String(e?.code || "");
+        const closeText = `${code} ${reason}`;
+
+        if (reason.includes("400") || reason.includes("Bad Request")) {
+          setStatus("offline");
+          return;
+        }
+
+        if (isUnauthorized(closeText)) {
+          const freshToken = await refreshTokenOnlyWhenNeeded();
+
+          if (!freshToken) {
+            setStatus("offline");
+            return;
+          }
+
+          reconnectTimer.current = setTimeout(() => {
+            if (mounted.current) connectSocket(freshToken);
+          }, 700);
+
+          return;
+        }
+
+        const delay = Math.min(1000 * reconnectAttempt.current, 5000);
+
+        reconnectTimer.current = setTimeout(() => {
+          if (mounted.current) connectSocket();
+        }, delay);
+      };
+    },
+    [
+      goalClassID,
+      getCurrentToken,
+      myUserID,
+      refreshTokenOnlyWhenNeeded,
+      sendWs,
+      startTimerFrom,
+      userDp,
+    ]
+  );
 
   const restoreLocalStudy = useCallback(async () => {
     const active = await AsyncStorage.getItem(STUDY_ACTIVE_KEY);
@@ -411,8 +477,9 @@ export default function StudyRoomScreen() {
 
       if (!mounted.current) return;
 
-      connectSocket();
-    } catch {
+      await connectSocket();
+    } catch (error) {
+      console.log("OPEN_STUDY_ROOM_ERROR:", error);
       setStatus("offline");
       setLoading(false);
     }
@@ -446,7 +513,6 @@ export default function StudyRoomScreen() {
     isStudyingRef.current = false;
     setIsStudying(false);
     setStudySeconds(0);
-    startedAtRef.current = 0;
 
     await AsyncStorage.removeItem(STUDY_ACTIVE_KEY);
     await AsyncStorage.removeItem(STUDY_STARTED_AT_KEY);
@@ -538,7 +604,7 @@ export default function StudyRoomScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.refresh} onPress={connectSocket}>
+        <TouchableOpacity style={styles.refresh} onPress={() => connectSocket()}>
           <Ionicons name="refresh" size={20} color={BLUE} />
         </TouchableOpacity>
       </View>
@@ -567,7 +633,10 @@ export default function StudyRoomScreen() {
 
               <View style={[styles.livePill, isStudying ? styles.liveOn : styles.liveOff]}>
                 <View
-                  style={[styles.liveDot, isStudying ? styles.liveDotOn : styles.liveDotOff]}
+                  style={[
+                    styles.liveDot,
+                    isStudying ? styles.liveDotOn : styles.liveDotOff,
+                  ]}
                 />
                 <Text
                   style={[
@@ -622,7 +691,9 @@ export default function StudyRoomScreen() {
               <View style={styles.statIconBlue}>
                 <Ionicons name="time-outline" size={22} color={BLUE} />
               </View>
-              <Text style={styles.statNumberSmall}>{formatStudyTime(studySeconds)}</Text>
+              <Text style={styles.statNumberSmall}>
+                {formatStudyTime(studySeconds)}
+              </Text>
               <Text style={styles.statLabel}>Your time</Text>
             </View>
           </View>
@@ -700,7 +771,6 @@ export default function StudyRoomScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
-
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -710,7 +780,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
   },
-
   headerIcon: {
     width: 48,
     height: 48,
@@ -722,34 +791,11 @@ const styles = StyleSheet.create({
     borderColor: "#DBEAFE",
     marginRight: 12,
   },
-
   headerText: { flex: 1 },
-
-  title: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: TEXT,
-  },
-
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 7,
-  },
-
-  subtitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: MUTED,
-  },
-
+  title: { fontSize: 22, fontWeight: "900", color: TEXT },
+  statusRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
+  dot: { width: 8, height: 8, borderRadius: 4, marginRight: 7 },
+  subtitle: { fontSize: 12, fontWeight: "800", color: MUTED },
   refresh: {
     width: 42,
     height: 42,
@@ -760,13 +806,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DBEAFE",
   },
-
-  body: {
-    flex: 1,
-    backgroundColor: PAGE,
-    padding: 16,
-  },
-
+  body: { flex: 1, backgroundColor: PAGE, padding: 16 },
   heroCard: {
     backgroundColor: BG,
     borderRadius: 30,
@@ -779,27 +819,18 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 10 },
     elevation: 5,
   },
-
   heroTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   heroLabel: {
     fontSize: 11,
     fontWeight: "900",
     color: BLUE,
     letterSpacing: 1,
   },
-
-  heroName: {
-    marginTop: 5,
-    fontSize: 19,
-    fontWeight: "900",
-    color: TEXT,
-  },
-
+  heroName: { marginTop: 5, fontSize: 19, fontWeight: "900", color: TEXT },
   livePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -808,35 +839,14 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
   },
-
-  liveOn: {
-    backgroundColor: SOFT_GREEN,
-    borderColor: "#BBF7D0",
-  },
-
-  liveOff: {
-    backgroundColor: "#F8FAFC",
-    borderColor: BORDER,
-  },
-
-  liveDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-
+  liveOn: { backgroundColor: SOFT_GREEN, borderColor: "#BBF7D0" },
+  liveOff: { backgroundColor: "#F8FAFC", borderColor: BORDER },
+  liveDot: { width: 7, height: 7, borderRadius: 4, marginRight: 6 },
   liveDotOn: { backgroundColor: GREEN },
   liveDotOff: { backgroundColor: MUTED },
-
-  livePillText: {
-    fontSize: 11,
-    fontWeight: "900",
-  },
-
+  livePillText: { fontSize: 11, fontWeight: "900" },
   liveTextOn: { color: GREEN },
   liveTextOff: { color: MUTED },
-
   timer: {
     marginTop: 22,
     fontSize: 52,
@@ -845,7 +855,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textAlign: "center",
   },
-
   studyStatus: {
     marginTop: 8,
     fontSize: 14,
@@ -853,7 +862,6 @@ const styles = StyleSheet.create({
     color: MUTED,
     textAlign: "center",
   },
-
   mainButton: {
     marginTop: 22,
     flexDirection: "row",
@@ -863,23 +871,11 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 20,
   },
-
   startButton: { backgroundColor: GREEN },
   stopButton: { backgroundColor: RED },
   disabledButton: { backgroundColor: "#9CA3AF" },
-
-  mainButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-
-  statsRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 14,
-  },
-
+  mainButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+  statsRow: { flexDirection: "row", gap: 12, marginTop: 14 },
   statCard: {
     flex: 1,
     backgroundColor: BG,
@@ -893,7 +889,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 5 },
     elevation: 2,
   },
-
   statIconGreen: {
     width: 42,
     height: 42,
@@ -903,7 +898,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 10,
   },
-
   statIconBlue: {
     width: 42,
     height: 42,
@@ -913,26 +907,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 10,
   },
-
-  statNumber: {
-    fontSize: 24,
-    fontWeight: "900",
-    color: TEXT,
-  },
-
-  statNumberSmall: {
-    fontSize: 17,
-    fontWeight: "900",
-    color: TEXT,
-  },
-
-  statLabel: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: "800",
-    color: MUTED,
-  },
-
+  statNumber: { fontSize: 24, fontWeight: "900", color: TEXT },
+  statNumberSmall: { fontSize: 17, fontWeight: "900", color: TEXT },
+  statLabel: { marginTop: 3, fontSize: 12, fontWeight: "800", color: MUTED },
   listHeader: {
     marginTop: 20,
     marginBottom: 10,
@@ -940,20 +917,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: TEXT,
-  },
-
-  sectionSub: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: "700",
-    color: MUTED,
-  },
-
+  sectionTitle: { fontSize: 18, fontWeight: "900", color: TEXT },
+  sectionSub: { marginTop: 3, fontSize: 12, fontWeight: "700", color: MUTED },
   viewAllButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -964,18 +929,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DBEAFE",
   },
-
-  viewAllText: {
-    fontSize: 12,
-    fontWeight: "900",
-    color: BLUE,
-    marginRight: 3,
-  },
-
-  list: {
-    paddingBottom: Platform.OS === "ios" ? 30 : 16,
-  },
-
+  viewAllText: { fontSize: 12, fontWeight: "900", color: BLUE, marginRight: 3 },
+  list: { paddingBottom: Platform.OS === "ios" ? 30 : 16 },
   userCard: {
     backgroundColor: BG,
     borderRadius: 20,
@@ -991,7 +946,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 1,
   },
-
   avatar: {
     width: 44,
     height: 44,
@@ -1003,28 +957,10 @@ const styles = StyleSheet.create({
     borderColor: "#DBEAFE",
     marginRight: 12,
   },
-
-  avatarText: {
-    color: BLUE,
-    fontWeight: "900",
-    fontSize: 16,
-  },
-
+  avatarText: { color: BLUE, fontWeight: "900", fontSize: 16 },
   userInfo: { flex: 1 },
-
-  userName: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: TEXT,
-  },
-
-  userTime: {
-    marginTop: 3,
-    fontSize: 12,
-    fontWeight: "700",
-    color: MUTED,
-  },
-
+  userName: { fontSize: 15, fontWeight: "900", color: TEXT },
+  userTime: { marginTop: 3, fontSize: 12, fontWeight: "700", color: MUTED },
   liveBadge: {
     backgroundColor: SOFT_GREEN,
     paddingHorizontal: 9,
@@ -1033,19 +969,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#BBF7D0",
   },
-
-  liveBadgeText: {
-    color: GREEN,
-    fontSize: 10,
-    fontWeight: "900",
-  },
-
+  liveBadgeText: { color: GREEN, fontSize: 10, fontWeight: "900" },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.35)",
     justifyContent: "flex-end",
   },
-
   modalCard: {
     maxHeight: "82%",
     backgroundColor: BG,
@@ -1054,7 +983,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
   },
-
   modalHandle: {
     width: 44,
     height: 5,
@@ -1063,27 +991,14 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginBottom: 16,
   },
-
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
   },
-
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: TEXT,
-  },
-
-  modalSub: {
-    marginTop: 4,
-    fontSize: 12,
-    fontWeight: "700",
-    color: MUTED,
-  },
-
+  modalTitle: { fontSize: 20, fontWeight: "900", color: TEXT },
+  modalSub: { marginTop: 4, fontSize: 12, fontWeight: "700", color: MUTED },
   modalClose: {
     width: 40,
     height: 40,
@@ -1094,11 +1009,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: BORDER,
   },
-
-  modalList: {
-    paddingBottom: 10,
-  },
-
+  modalList: { paddingBottom: 10 },
   center: {
     flex: 1,
     alignItems: "center",
@@ -1106,20 +1017,8 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: BG,
   },
-
-  loading: {
-    marginTop: 12,
-    fontSize: 15,
-    fontWeight: "900",
-    color: BLUE,
-  },
-
-  emptyBox: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 35,
-  },
-
+  loading: { marginTop: 12, fontSize: 15, fontWeight: "900", color: BLUE },
+  emptyBox: { alignItems: "center", justifyContent: "center", padding: 35 },
   emptyTitle: {
     marginTop: 12,
     fontSize: 20,
@@ -1127,7 +1026,6 @@ const styles = StyleSheet.create({
     color: TEXT,
     textAlign: "center",
   },
-
   emptyText: {
     marginTop: 6,
     fontSize: 14,

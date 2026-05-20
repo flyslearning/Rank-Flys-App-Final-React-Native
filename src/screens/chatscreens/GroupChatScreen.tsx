@@ -1,13 +1,29 @@
-import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
-  View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity,
-  KeyboardAvoidingView, Platform, ActivityIndicator, StatusBar, AppState,
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
+  ActivityIndicator,
+  StatusBar,
+  AppState,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth.store";
+import { ChatAPI } from "../../api/chat.api";
 
-const CHAT_API = "https://api.flyslearning.com/chat/api/v1/chat";
 const CHAT_WS = "wss://api.flyslearning.com/chat-ws/api/v1/chat";
 
 const BLUE = "#2563EB";
@@ -20,8 +36,8 @@ const GREEN = "#22C55E";
 const ORANGE = "#F59E0B";
 const RED = "#EF4444";
 
-const DEBUG = true;
-const log = (...a: any[]) => DEBUG && console.log("[CHAT_WS_ONLY]", ...a);
+const DEBUG = false;
+const log = (...a: any[]) => DEBUG && console.log("[GROUP_CHAT]", ...a);
 
 type Msg = {
   id?: string;
@@ -39,6 +55,14 @@ type Msg = {
   failed?: boolean;
 };
 
+type OnlineUser = {
+  user_id?: string;
+  id?: string;
+  user_name?: string;
+  name?: string;
+  full_name?: string;
+};
+
 type Status = "connecting" | "connected" | "reconnecting" | "offline";
 
 function parseJwt(token: string) {
@@ -50,25 +74,43 @@ function parseJwt(token: string) {
   }
 }
 
+function isUnauthorized(text: string) {
+  return (
+    text.includes("401") ||
+    text.includes("Unauthorized") ||
+    text.includes("unauthorized")
+  );
+}
+
 function keyOf(m: Msg, index = 0) {
-  return String(m.id || m.message_id || m.temp_id || `${m.created_at || "msg"}-${index}`);
+  return String(
+    m.id || m.message_id || m.temp_id || `${m.created_at || "msg"}-${index}`
+  );
 }
 
 function normalize(arr: Msg[]) {
   const map = new Map<string, Msg>();
-  arr.forEach((m, i) => map.set(keyOf(m, i), m));
+
+  arr.forEach((m, i) => {
+    map.set(keyOf(m, i), m);
+  });
+
   return [...map.values()].sort(
-    (a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+    (a, b) =>
+      new Date(a.created_at || 0).getTime() -
+      new Date(b.created_at || 0).getTime()
   );
 }
 
-async function readJson(res: Response) {
-  const text = await res.text();
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return {};
-  }
+function extractOnlineUsers(data: any): OnlineUser[] {
+  if (Array.isArray(data?.users)) return data.users;
+  if (Array.isArray(data?.online_users)) return data.online_users;
+  if (Array.isArray(data?.online?.users)) return data.online.users;
+  return [];
+}
+
+function onlineUserName(u: OnlineUser) {
+  return u.user_name || u.full_name || u.name || "Student";
 }
 
 export default function GroupChatScreen() {
@@ -87,15 +129,18 @@ export default function GroupChatScreen() {
 
   const payload: any = useMemo(() => parseJwt(token), [token]);
 
-const goalClassID = String(
-  payload?.goal_class_id ||
-    user?.goal_class_id ||
-    user?.goalClassID ||
-    user?.profile?.goal_class_id ||
-    ""
-);
+  const goalClassID = String(
+    payload?.goal_class_id ||
+      user?.goal_class_id ||
+      user?.goalClassID ||
+      user?.profile?.goal_class_id ||
+      ""
+  );
 
-  const myUserID = String(payload?.user_id || user?.id || user?.user_id || user?.profile?.id || "");
+  const myUserID = String(
+    payload?.user_id || user?.id || user?.user_id || user?.profile?.id || ""
+  );
+
   const myName =
     user?.name ||
     user?.full_name ||
@@ -103,13 +148,19 @@ const goalClassID = String(
     "You";
 
   const myIds = useMemo(
-    () => new Set([myUserID, payload?.user_id, user?.id, user?.user_id].filter(Boolean).map(String)),
+    () =>
+      new Set(
+        [myUserID, payload?.user_id, user?.id, user?.user_id]
+          .filter(Boolean)
+          .map(String)
+      ),
     [myUserID, payload, user]
   );
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [onlineCount, setOnlineCount] = useState(0);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Status>("connecting");
   const [loading, setLoading] = useState(true);
@@ -121,6 +172,7 @@ const goalClassID = String(
   const mounted = useRef(true);
   const reconnectTimer = useRef<any>(null);
   const typingTimer = useRef<any>(null);
+  const typingStartedRef = useRef(false);
   const manualClose = useRef(false);
   const reconnectAttempt = useRef(0);
   const socketOpening = useRef(false);
@@ -128,64 +180,62 @@ const goalClassID = String(
 
   const listData = useMemo(() => [...messages].reverse(), [messages]);
 
-  const authHeaders = useMemo(
-    () => ({
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    }),
-    [token]
-  );
+  const getCurrentToken = useCallback(() => {
+    const state: any = useAuthStore.getState();
+    return state.accessToken || token;
+  }, [token]);
 
-  const wsUrl = useMemo(() => {
-    return `${CHAT_WS}/ws/${encodeURIComponent(goalClassID)}?token=${encodeURIComponent(token)}`;
-  }, [goalClassID, token]);
+  const refreshTokenOnlyWhenNeeded = useCallback(async () => {
+    const state: any = useAuthStore.getState();
+    const fresh = await state.refreshAccessToken?.();
+    return fresh || null;
+  }, []);
 
   const typingText = useMemo(() => {
     const names = Object.values(typingUsers);
+
     if (!names.length) return "";
     if (names.length === 1) return `${names[0]} typing...`;
+
     return `${names[0]} and ${names.length - 1} others typing...`;
   }, [typingUsers]);
 
-  const joinChat = useCallback(async () => {
-    const res = await fetch(`${CHAT_API}/join`, {
-      method: "POST",
-      headers: authHeaders,
-      body: JSON.stringify({ goal_class_id: goalClassID }),
-    });
+  const onlineNamesText = useMemo(() => {
+    if (!onlineUsers.length) return "";
 
-    const body = await readJson(res);
-    if (!res.ok) throw new Error(`Join failed ${res.status}: ${JSON.stringify(body)}`);
-  }, [authHeaders, goalClassID]);
+    return onlineUsers
+      .filter((u) => {
+        const id = String(u.user_id || u.id || "");
+        return !id || !myIds.has(id);
+      })
+      .slice(0, 4)
+      .map(onlineUserName)
+      .join(", ");
+  }, [onlineUsers, myIds]);
+
+  const joinChat = useCallback(async () => {
+    await ChatAPI.join(goalClassID);
+  }, [goalClassID]);
 
   const fetchMessages = useCallback(
     async (before?: string) => {
-      const url = before
-        ? `${CHAT_API}/groups/${goalClassID}/messages?before=${encodeURIComponent(before)}`
-        : `${CHAT_API}/groups/${goalClassID}/messages`;
-
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const body = await readJson(res);
-      if (!res.ok) throw new Error(`Messages failed ${res.status}: ${JSON.stringify(body)}`);
-
-      return Array.isArray(body?.messages) ? body.messages : [];
+      const res = await ChatAPI.messages(goalClassID, before);
+      return Array.isArray(res.data?.messages) ? res.data.messages : [];
     },
-    [goalClassID, token]
+    [goalClassID]
   );
 
   const fetchOnline = useCallback(async () => {
-    const res = await fetch(`${CHAT_API}/groups/${goalClassID}/online`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const res = await ChatAPI.online(goalClassID);
 
-    const body = await readJson(res);
-    if (res.ok && mounted.current) setOnlineCount(Number(body?.online_count || 0));
-  }, [goalClassID, token]);
+    if (!mounted.current) return;
 
-  const closeSocket = useCallback((manual = true, nextStatus: Status = "offline") => {
+    setOnlineCount(Number(res.data?.online_count || 0));
+    setOnlineUsers(extractOnlineUsers(res.data));
+  }, [goalClassID]);
+
+  const closeSocket = useCallback(
+  (manual = true, nextStatus: Status = "offline") => {
     manualClose.current = manual;
 
     if (reconnectTimer.current) {
@@ -196,6 +246,9 @@ const goalClassID = String(
     const ws = wsRef.current;
     wsRef.current = null;
     socketOpening.current = false;
+
+    setOnlineCount(0);
+    setOnlineUsers([]);
 
     if (ws) {
       ws.onopen = null;
@@ -209,7 +262,9 @@ const goalClassID = String(
     }
 
     if (manual) setStatus(nextStatus);
-  }, []);
+  },
+  []
+);
 
   const sendWs = useCallback((payload: any) => {
     const ws = wsRef.current;
@@ -219,165 +274,204 @@ const goalClassID = String(
       return true;
     }
 
-    log("WS_SEND_BLOCKED_NOT_CONNECTED", payload);
+    log("WS_SEND_BLOCKED", payload);
     return false;
   }, []);
 
-  const connectSocket = useCallback(() => {
-    if (!token || !goalClassID) {
-      setStatus("offline");
-      return;
-    }
+  const connectSocket = useCallback(
+    async (forceToken?: string) => {
+      const currentToken = forceToken || getCurrentToken();
 
-    const current = wsRef.current;
+      if (!currentToken || !goalClassID) {
+        setStatus("offline");
+        return;
+      }
 
-    if (current?.readyState === WebSocket.OPEN) {
-      setStatus("connected");
-      return;
-    }
+      const current = wsRef.current;
 
-    if (current?.readyState === WebSocket.CONNECTING || socketOpening.current) {
-      return;
-    }
+      if (current?.readyState === WebSocket.OPEN) {
+        setStatus("connected");
+        return;
+      }
 
-    socketOpening.current = true;
-    manualClose.current = false;
+      if (current?.readyState === WebSocket.CONNECTING || socketOpening.current) {
+        return;
+      }
 
-    log("WS_CONNECTING", {
-      url: wsUrl.replace(token, "***TOKEN***"),
-      tokenLength: token.length,
-      goalClassID,
-    });
+      socketOpening.current = true;
+      manualClose.current = false;
 
-    setStatus(reconnectAttempt.current > 0 ? "reconnecting" : "connecting");
+      setStatus(reconnectAttempt.current > 0 ? "reconnecting" : "connecting");
 
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
+      const wsUrl = `${CHAT_WS}/ws/${encodeURIComponent(
+        goalClassID
+      )}?token=${encodeURIComponent(currentToken)}`;
 
-    ws.onopen = () => {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
       if (!mounted.current || wsRef.current !== ws) return;
-
-      log("WS_CONNECTED");
 
       socketOpening.current = false;
       reconnectAttempt.current = 0;
-      setStatus("connected");
+     setStatus("connected");
 
-      fetchOnline().catch(() => {});
+      joinChat()
+        .then(() => fetchOnline())
+        .catch(() => {});
+
+      setTimeout(() => {
+        if (mounted.current) {
+          joinChat()
+            .then(() => fetchOnline())
+            .catch(() => {});
+        }
+      }, 1000);
+
+      setTimeout(() => {
+        if (mounted.current) fetchOnline().catch(() => {});
+      }, 1000);
     };
 
-    ws.onmessage = (event) => {
-      if (!mounted.current || wsRef.current !== ws) return;
+      ws.onmessage = (event) => {
+        if (!mounted.current || wsRef.current !== ws) return;
 
-      try {
-        const data = JSON.parse(event.data);
-        const eventName = data?.event;
+        try {
+          const data = JSON.parse(event.data);
+          const eventName = data?.event;
 
-        log("WS_EVENT", eventName);
+          if (eventName === "message.created" && data?.message) {
+            const incoming: Msg = data.message;
 
-        if (eventName === "message.created" && data?.message) {
-          const incoming: Msg = data.message;
+            setMessages((prev) => {
+              const incomingID = incoming.id || incoming.message_id;
+              const incomingUserID = String(
+                incoming.user_id || incoming.sender_id || ""
+              );
 
-          setMessages((prev) => {
-            const incomingID = incoming.id || incoming.message_id;
-            const incomingUserID = String(incoming.user_id || incoming.sender_id || "");
+              const withoutTemp = prev.filter((m) => {
+                if (!m.temp_id) return true;
 
-            const withoutTemp = prev.filter((m) => {
-              if (!m.temp_id) return true;
+                const sameUser = myIds.has(incomingUserID);
+                const sameBody =
+                  String(m.body || m.message || "") ===
+                  String(incoming.body || incoming.message || "");
 
-              const sameUser = myIds.has(incomingUserID);
-              const sameBody =
-                String(m.body || m.message || "") === String(incoming.body || incoming.message || "");
+                return !(sameUser && sameBody);
+              });
 
-              return !(sameUser && sameBody);
+              const exists = withoutTemp.some(
+                (m) => String(m.id || m.message_id) === String(incomingID)
+              );
+
+              if (exists) return withoutTemp;
+
+              return normalize([...withoutTemp, incoming]);
             });
 
-            const exists = withoutTemp.some(
-              (m) => String(m.id || m.message_id) === String(incomingID)
-            );
+            requestAnimationFrame(() => {
+              listRef.current?.scrollToOffset({ offset: 0, animated: true });
+            });
+          }
 
-            if (exists) return withoutTemp;
+          if (eventName === "presence.updated") {
+            setOnlineCount(Number(data?.online_count || 0));
 
-            return normalize([...withoutTemp, incoming]);
-          });
+            const users = extractOnlineUsers(data);
+            if (users.length) {
+              setOnlineUsers(users);
+            }
+          }
 
-          requestAnimationFrame(() => {
-            listRef.current?.scrollToOffset({ offset: 0, animated: true });
-          });
-        }
+          if (eventName === "typing.start") {
+            const userID = String(data?.user_id || "");
+            const userName = String(data?.user_name || "Someone");
 
-        if (eventName === "presence.updated") {
-          setOnlineCount(Number(data?.online_count || 0));
-        }
+            if (!userID || myIds.has(userID)) return;
 
-        if (eventName === "typing.start") {
-          const userID = String(data?.user_id || "");
-          const userName = String(data?.user_name || "Someone");
+            setTypingUsers((prev) => ({ ...prev, [userID]: userName }));
 
-          if (!userID || myIds.has(userID)) return;
+            setTimeout(() => {
+              setTypingUsers((prev) => {
+                const next = { ...prev };
+                delete next[userID];
+                return next;
+              });
+            }, 2500);
+          }
 
-          setTypingUsers((prev) => ({ ...prev, [userID]: userName }));
+          if (eventName === "typing.stop") {
+            const userID = String(data?.user_id || "");
+            if (!userID) return;
 
-          setTimeout(() => {
             setTypingUsers((prev) => {
               const next = { ...prev };
               delete next[userID];
               return next;
             });
-          }, 2500);
+          }
+        } catch (e) {
+          log("WS_PARSE_ERROR", String(e));
+        }
+      };
+
+      ws.onerror = (e) => {
+        log("WS_ERROR", e);
+        socketOpening.current = false;
+      };
+
+      ws.onclose = async (e: any) => {
+        if (!mounted.current || wsRef.current !== ws) return;
+
+        wsRef.current = null;
+        socketOpening.current = false;
+
+        if (manualClose.current) return;
+
+        reconnectAttempt.current += 1;
+        setStatus("reconnecting");
+
+        const reason = String(e?.reason || "");
+        const code = String(e?.code || "");
+        const closeText = `${code} ${reason}`;
+
+        if (reason.includes("400") || reason.includes("Bad Request")) {
+          setStatus("offline");
+          return;
         }
 
-        if (eventName === "typing.stop") {
-          const userID = String(data?.user_id || "");
-          if (!userID) return;
+        if (isUnauthorized(closeText)) {
+          const freshToken = await refreshTokenOnlyWhenNeeded();
 
-          setTypingUsers((prev) => {
-            const next = { ...prev };
-            delete next[userID];
-            return next;
-          });
+          if (!freshToken) {
+            setStatus("offline");
+            return;
+          }
+
+          reconnectTimer.current = setTimeout(() => {
+            if (mounted.current) connectSocket(freshToken);
+          }, 700);
+
+          return;
         }
-      } catch (e) {
-        log("WS_PARSE_ERROR", String(e));
-      }
-    };
 
-    ws.onerror = (e) => {
-      log("WS_ERROR", String(e));
-    };
+        const delay = Math.min(1000 * reconnectAttempt.current, 5000);
 
-    ws.onclose = (e: any) => {
-      if (!mounted.current || wsRef.current !== ws) return;
-
-      log("WS_CLOSED", {
-        code: e?.code,
-        reason: e?.reason,
-        manual: manualClose.current,
-      });
-
-      wsRef.current = null;
-      socketOpening.current = false;
-
-      if (manualClose.current) return;
-
-      reconnectAttempt.current += 1;
-      setStatus("reconnecting");
-
-      const reason = String(e?.reason || "");
-
-      if (reason.includes("400") || reason.includes("Bad Request")) {
-        log("BACKEND_WS_BAD_REQUEST_FIX_REQUIRED");
-        setStatus("offline");
-        return;
-      }
-
-      const delay = Math.min(1000 * reconnectAttempt.current, 5000);
-
-      reconnectTimer.current = setTimeout(() => {
-        if (mounted.current) connectSocket();
-      }, delay);
-    };
-  }, [token, goalClassID, wsUrl, fetchOnline, myIds]);
+        reconnectTimer.current = setTimeout(() => {
+          if (mounted.current) connectSocket();
+        }, delay);
+      };
+    },
+    [
+      goalClassID,
+      getCurrentToken,
+      fetchOnline,
+      joinChat,
+      myIds,
+      refreshTokenOnlyWhenNeeded,
+    ]
+  );
 
   const openChat = useCallback(async () => {
     if (!token || !goalClassID) {
@@ -390,8 +484,6 @@ const goalClassID = String(
       setLoading(true);
       setStatus("connecting");
 
-      log("OPEN_CHAT_START");
-
       await joinChat();
 
       const [history] = await Promise.all([fetchMessages(), fetchOnline()]);
@@ -402,9 +494,7 @@ const goalClassID = String(
       setHasMoreOlder(history.length >= 20);
       initialLoaded.current = true;
 
-      log("OPEN_CHAT_LOADED", { count: history.length });
-
-      connectSocket();
+      await connectSocket();
     } catch (e) {
       log("OPEN_CHAT_FAILED", String(e));
       setStatus("offline");
@@ -418,15 +508,17 @@ const goalClassID = String(
     openChat();
 
     const sub = AppState.addEventListener("change", (state) => {
-      log("APP_STATE", state);
+  if (state === "active") {
+    manualClose.current = false;
+    connectSocket();
 
-      if (state === "active") {
-        manualClose.current = false;
-        connectSocket();
-      } else {
-        closeSocket(true);
-      }
-    });
+    fetchOnline().catch(() => {});
+
+    setTimeout(() => {
+      if (mounted.current) fetchOnline().catch(() => {});
+    }, 1000);
+  }
+  });
 
     return () => {
       mounted.current = false;
@@ -438,69 +530,71 @@ const goalClassID = String(
     };
   }, [openChat, connectSocket, closeSocket]);
 
-    const loadOlder = useCallback(async () => {
-      if (
-        loading ||
-        loadingOlder ||
-        !hasMoreOlder ||
-        !initialLoaded.current ||
-        messages.length < 20
-      ) {
+  const loadOlder = useCallback(async () => {
+    if (
+      loading ||
+      loadingOlder ||
+      !hasMoreOlder ||
+      !initialLoaded.current ||
+      messages.length < 20
+    ) {
+      return;
+    }
+
+    const oldest = messages[0]?.created_at;
+    if (!oldest) return;
+
+    try {
+      setLoadingOlder(true);
+
+      const older = await fetchMessages(oldest);
+
+      if (!older.length) {
+        setHasMoreOlder(false);
         return;
       }
 
-      const oldest = messages[0]?.created_at;
-      if (!oldest) return;
+      setMessages((prev) => normalize([...older, ...prev]));
 
-      try {
-        setLoadingOlder(true);
-
-        const older = await fetchMessages(oldest);
-
-        if (!older.length) {
-          setHasMoreOlder(false);
-          return;
-        }
-
-        setMessages((prev) => normalize([...older, ...prev]));
-
-        if (older.length < 20) {
-          setHasMoreOlder(false);
-        }
-      } catch (e) {
-        log("LOAD_OLDER_FAILED", String(e));
-      } finally {
-        setLoadingOlder(false);
+      if (older.length < 20) {
+        setHasMoreOlder(false);
       }
-    }, [loading, loadingOlder, hasMoreOlder, messages, fetchMessages]);
+    } catch (e) {
+      log("LOAD_OLDER_FAILED", String(e));
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [loading, loadingOlder, hasMoreOlder, messages, fetchMessages]);
 
   const handleTyping = useCallback(
-    (text: string) => {
-      setInput(text);
+  (text: string) => {
+    setInput(text);
 
-      if (text.trim()) {
-        sendWs({ event: "typing.start" });
-      }
+    if (text.trim() && !typingStartedRef.current) {
+      typingStartedRef.current = true;
+      sendWs({ event: "typing.start" });
+    }
 
-      if (typingTimer.current) clearTimeout(typingTimer.current);
+    if (typingTimer.current) clearTimeout(typingTimer.current);
 
-      typingTimer.current = setTimeout(() => {
-        sendWs({ event: "typing.stop" });
-      }, 1200);
-    },
-    [sendWs]
-  );
+    typingTimer.current = setTimeout(() => {
+      typingStartedRef.current = false;
+      sendWs({ event: "typing.stop" });
+    }, 1500);
+  },
+  [sendWs]
+);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
     if (!text) return;
 
     if (status !== "connected" || wsRef.current?.readyState !== WebSocket.OPEN) {
-      log("MESSAGE_NOT_SENT_SOCKET_OFFLINE");
       return;
     }
 
     setInput("");
+    typingStartedRef.current = false;
     sendWs({ event: "typing.stop" });
 
     const tempID = `temp-${Date.now()}`;
@@ -528,14 +622,18 @@ const goalClassID = String(
 
     if (!ok) {
       setMessages((prev) =>
-        prev.map((m) => (m.temp_id === tempID ? { ...m, pending: false, failed: true } : m))
+        prev.map((m) =>
+          m.temp_id === tempID ? { ...m, pending: false, failed: true } : m
+        )
       );
       return;
     }
 
     setTimeout(() => {
       setMessages((prev) =>
-        prev.map((m) => (m.temp_id === tempID ? { ...m, pending: false } : m))
+        prev.map((m) =>
+          m.temp_id === tempID ? { ...m, pending: false } : m
+        )
       );
     }, 1800);
   }, [input, status, sendWs, myUserID, myName]);
@@ -572,13 +670,20 @@ const goalClassID = String(
 
           <View style={styles.headerText}>
             <Text style={styles.title}>Community Chat</Text>
+
             <View style={styles.statusRow}>
               <View style={[styles.dot, { backgroundColor: statusMeta.color }]} />
               <Text style={styles.subtitle}>{statusMeta.text}</Text>
             </View>
+
+            {!!onlineNamesText && (
+              <Text style={styles.onlineNames} numberOfLines={1}>
+                Online: {onlineNamesText}
+              </Text>
+            )}
           </View>
 
-          <TouchableOpacity style={styles.refresh} onPress={connectSocket}>
+          <TouchableOpacity style={styles.refresh} onPress={() => connectSocket()}>
             <Ionicons name="flash" size={20} color={BLUE} />
           </TouchableOpacity>
         </View>
@@ -599,7 +704,10 @@ const goalClassID = String(
                 const senderID = String(item.user_id || item.sender_id || "");
                 return <Bubble item={item} isMine={myIds.has(senderID)} />;
               }}
-              contentContainerStyle={[styles.list, { flexGrow: messages.length ? undefined : 1 }]}
+              contentContainerStyle={[
+                styles.list,
+                { flexGrow: messages.length ? undefined : 1 },
+              ]}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
               onEndReached={loadOlder}
@@ -611,7 +719,11 @@ const goalClassID = String(
               }
               ListEmptyComponent={
                 <View style={styles.emptyBox}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={54} color={BLUE} />
+                  <Ionicons
+                    name="chatbubble-ellipses-outline"
+                    size={54}
+                    color={BLUE}
+                  />
                   <Text style={styles.emptyTitle}>No messages yet</Text>
                   <Text style={styles.emptyText}>First message aap bhejo.</Text>
                 </View>
@@ -626,14 +738,19 @@ const goalClassID = String(
               <View style={styles.offlineBar}>
                 <Ionicons name="warning-outline" size={15} color={RED} />
                 <Text style={styles.offlineText}>
-            Aapka internet ya realtime connection issue ki wajah se message abhi send nahi ho pa raha hai.                </Text>
+                  Realtime connection issue ki wajah se message abhi send nahi ho
+                  pa raha hai.
+                </Text>
               </View>
             )}
 
             <View
               style={[
                 styles.inputWrap,
-                { paddingBottom: Platform.OS === "ios" ? Math.max(insets.bottom, 10) : 10 },
+                {
+                  paddingBottom:
+                    Platform.OS === "ios" ? Math.max(insets.bottom, 10) : 10,
+                },
               ]}
             >
               <View style={styles.inputBox}>
@@ -676,7 +793,9 @@ const Bubble = memo(({ item, isMine }: { item: Msg; isMine: boolean }) => {
     <View style={[styles.row, isMine ? styles.myRow : styles.otherRow]}>
       {!isMine && (
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{String(name).charAt(0).toUpperCase()}</Text>
+          <Text style={styles.avatarText}>
+            {String(name).charAt(0).toUpperCase()}
+          </Text>
         </View>
       )}
 
@@ -684,7 +803,11 @@ const Bubble = memo(({ item, isMine }: { item: Msg; isMine: boolean }) => {
         {!isMine && <Text style={styles.name}>{name}</Text>}
         <Text style={[styles.msg, isMine && styles.myMsg]}>{body}</Text>
         <Text style={[styles.time, isMine && styles.myTime]}>
-          {item.failed ? "Failed" : item.pending ? "Sending..." : formatTime(item.created_at)}
+          {item.failed
+            ? "Failed"
+            : item.pending
+            ? "Sending..."
+            : formatTime(item.created_at)}
         </Text>
       </View>
     </View>
@@ -693,8 +816,12 @@ const Bubble = memo(({ item, isMine }: { item: Msg; isMine: boolean }) => {
 
 function formatTime(date?: string) {
   if (!date) return "";
+
   try {
-    return new Date(date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return new Date(date).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return "";
   }
@@ -727,6 +854,12 @@ const styles = StyleSheet.create({
   statusRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 7 },
   subtitle: { fontSize: 12, fontWeight: "800", color: MUTED },
+  onlineNames: {
+    marginTop: 3,
+    fontSize: 11,
+    fontWeight: "700",
+    color: MUTED,
+  },
   refresh: {
     width: 40,
     height: 40,
@@ -747,7 +880,12 @@ const styles = StyleSheet.create({
     backgroundColor: BG,
   },
   loading: { marginTop: 12, fontSize: 15, fontWeight: "900", color: BLUE },
-  emptyBox: { flex: 1, alignItems: "center", justifyContent: "center", padding: 30 },
+  emptyBox: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 30,
+  },
   emptyTitle: {
     marginTop: 12,
     fontSize: 20,
