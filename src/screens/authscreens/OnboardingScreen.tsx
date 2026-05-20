@@ -16,6 +16,7 @@ import LottieView from "lottie-react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuthStore } from "../../store/auth.store";
 
 import { RootStackParamList, Goal, ClassItem } from "../../types";
 import AppInput from "../../components/AppInput";
@@ -27,6 +28,7 @@ type Props = NativeStackScreenProps<RootStackParamList, "Onboarding">;
 
 export default function OnboardingScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const setUser = useAuthStore((s) => s.setUser);
 
   const [step, setStep] = useState(1);
 
@@ -136,29 +138,34 @@ export default function OnboardingScreen({ navigation }: Props) {
 
       const oldRefreshToken = await AsyncStorage.getItem("refresh_token");
 
-    if (oldRefreshToken) {
-      const refreshRes = await AuthAPI.refresh(oldRefreshToken);
+      if (oldRefreshToken) {
+        const refreshRes = await AuthAPI.refresh(oldRefreshToken);
 
-      const newAccessToken =
-        refreshRes.data?.access_token ||
-        refreshRes.data?.accessToken ||
-        refreshRes.data?.data?.access_token ||
-        refreshRes.data?.data?.accessToken;
+        const newAccessToken =
+          refreshRes.data?.access_token ||
+          refreshRes.data?.accessToken ||
+          refreshRes.data?.data?.access_token ||
+          refreshRes.data?.data?.accessToken;
 
-      const newRefreshToken =
-        refreshRes.data?.refresh_token ||
-        refreshRes.data?.refreshToken ||
-        refreshRes.data?.data?.refresh_token ||
-        refreshRes.data?.data?.refreshToken ||
-        oldRefreshToken;
+        const newRefreshToken =
+          refreshRes.data?.refresh_token ||
+          refreshRes.data?.refreshToken ||
+          refreshRes.data?.data?.refresh_token ||
+          refreshRes.data?.data?.refreshToken ||
+          oldRefreshToken;
 
-      if (newAccessToken) {
-        await AsyncStorage.setItem("access_token", newAccessToken);
-        await AsyncStorage.setItem("refresh_token", newRefreshToken);
+        if (newAccessToken) {
+          await AsyncStorage.setItem("access_token", newAccessToken);
+          await AsyncStorage.setItem("refresh_token", newRefreshToken);
 
-        setAuthToken(newAccessToken, newRefreshToken);
+          await setAuthToken(newAccessToken, newRefreshToken);
+        }
       }
-    }
+
+      const profileRes = await AuthAPI.getProfile();
+      await setUser(profileRes.data);
+
+
       navigation.replace("MainTabs");
     } catch {
       Alert.alert("Profile update failed");

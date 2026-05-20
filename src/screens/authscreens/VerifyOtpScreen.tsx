@@ -87,6 +87,9 @@ export default function VerifyOtpScreen({
   const setTokens = useAuthStore(
     (s) => s.setTokens
   );
+  const setUser = useAuthStore(
+  (s) => s.setUser
+  );
 
   // TIMER
   useEffect(() => {
@@ -251,6 +254,12 @@ export default function VerifyOtpScreen({
         accessToken,
         refreshToken
       );
+      try {
+      const profileRes = await AuthAPI.getProfile();
+      await setUser(profileRes.data);
+    } catch (e) {
+      console.log("Profile fetch after login failed:", e);
+    }
 
       navigation.replace(
         res.data?.next ===

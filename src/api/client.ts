@@ -12,6 +12,7 @@ export const EBOOK_BASE_URL = process.env.EXPO_PUBLIC_EBOOK_API;
 export const PAYMENT_BASE_URL = process.env.EXPO_PUBLIC_PAYMENT_API;
 export const TOOL_BASE_URL = process.env.EXPO_PUBLIC_TOOL_API;
 export const MENTORSHIP_BASE_URL = process.env.EXPO_PUBLIC_MENTORSHIP_API;
+export const CHAT_BASE_URL = process.env.EXPO_PUBLIC_CHAT_API;
 
 export const storage = {
   async get<T>(key: string): Promise<T | null> {
@@ -90,6 +91,14 @@ export const paymentClient = axios.create({
   },
 });
 
+export const chatClient = axios.create({
+  baseURL: CHAT_BASE_URL,
+  timeout: 15000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
 // Refresh ke liye raw client, isme interceptor nahi lagana
 const refreshClient = axios.create({
   baseURL: AUTH_BASE_URL,
@@ -145,6 +154,7 @@ const setDefaultAuthorizationHeader = (accessToken: string) => {
   paymentClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
   toolClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
   mentorshipClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+  chatClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
 };
 
 const refreshTokenAndRetry = async (error: AxiosError) => {
@@ -266,9 +276,14 @@ mentorshipClient.interceptors.request.use((config) =>
   attachToken(config, mentorshipClient)
 );
 
+chatClient.interceptors.request.use((config) =>
+  attachToken(config, chatClient)
+);
+
 attachRefreshInterceptor(authClient);
 attachRefreshInterceptor(testClient);
 attachRefreshInterceptor(ebookClient);
 attachRefreshInterceptor(paymentClient);
 attachRefreshInterceptor(toolClient);
 attachRefreshInterceptor(mentorshipClient);
+attachRefreshInterceptor(chatClient);

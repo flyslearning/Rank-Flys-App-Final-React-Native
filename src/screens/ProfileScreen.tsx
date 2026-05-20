@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { AuthAPI, setAuthToken } from "../api/auth.api";
+import { useAuthStore } from "../store/auth.store";
 import { MetaAPI } from "../api/meta.api";
 
 const { width } = Dimensions.get("window");
@@ -29,6 +30,8 @@ type ClassItem = { id: string; name: string };
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
+  const setUser = useAuthStore((s) => s.setUser);
+  
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -205,15 +208,18 @@ export default function ProfileScreen() {
         }
       }
 
-      setProfile((prev: any) => ({
-        ...prev,
+      const updatedProfile = {
+        ...profile,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         gender,
         goal_id: goalId,
         class_id: classId,
         onboarding_completed: true,
-      }));
+      };
+
+      setProfile(updatedProfile);
+      await setUser(updatedProfile);
 
       Alert.alert("Success", "Profile updated successfully");
       setEditMode(false);

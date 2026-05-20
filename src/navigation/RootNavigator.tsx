@@ -39,6 +39,7 @@ import Scholarship from "../screens/scholarshipscreens/ScholarshipScreens"
 import Mentorship from "../screens/mentorshipscreens/MentorshipScreens"
 import MentorshipScreens from "../screens/mentorshipscreens/MentorshipSeries"
 import ExploreScholarshipScreen from "../screens/scholarshipscreens/Explorescholarship"
+import GroupChatScreen from "../screens/chatscreens/GroupChatScreen";
 import MyMentor from "../screens/mentorshipscreens/MyMentor"
 import CheckoutScreen from "../screens/checkout/CheckoutScreen";
 import Contact from "../screens/extrascreens/Contact"
@@ -67,7 +68,7 @@ function BottomTabs() {
           let iconName: keyof typeof Ionicons.glyphMap = "home-outline";
 
           if (route.name === "Home") iconName = "home-outline";
-          if (route.name === "Test") iconName = "clipboard-outline";
+          if (route.name === "Community") iconName = "people-outline";
           if (route.name === "Flys") iconName = "play-circle-outline";
           if (route.name === "Ebook") iconName = "book-outline";
           if (route.name === "Doubt") iconName = "help-circle-outline";
@@ -84,10 +85,10 @@ function BottomTabs() {
       />
 
       <Tab.Screen
-        name="Test"
-        component={TestSeriesScreen}
-        options={{ title: "Test Series", tabBarLabel: "Tests" }}
-      />
+      name="Community"
+      component={GroupChatScreen}
+      options={{ headerShown: false, tabBarLabel: "Community" }}
+    />
       <Tab.Screen
         name="Flys"
         component={ReelScreen}

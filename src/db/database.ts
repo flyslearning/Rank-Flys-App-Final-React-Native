@@ -152,6 +152,21 @@ CREATE TABLE IF NOT EXISTS test_questions (
       content_id TEXT NOT NULL,
       content_type TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY NOT NULL,
+    goal_class_id TEXT NOT NULL,
+    user_id TEXT,
+    user_name TEXT,
+    user_avatar TEXT,
+    body TEXT,
+    type TEXT DEFAULT 'text',
+    created_at TEXT,
+    cached_at INTEGER
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_chat_messages_goal_created
+  ON chat_messages(goal_class_id, created_at);
     
 
     CREATE INDEX IF NOT EXISTS idx_tool_subjects_goal

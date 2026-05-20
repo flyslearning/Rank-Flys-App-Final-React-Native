@@ -5,10 +5,13 @@ import { clearAllCachedPdfs } from "../utils/pdfCache";
 type AuthState = {
   accessToken: string | null;
   refreshToken: string | null;
+  user: any | null;
   isReady: boolean;
   isAuthenticated: boolean;
 
   setTokens: (accessToken: string, refreshToken: string) => Promise<void>;
+  setUser: (user: any) => Promise<void>;
+  loadUser: () => Promise<void>;
   loadTokens: () => Promise<void>;
   clearTokens: () => Promise<void>;
   logout: () => Promise<void>;
@@ -17,6 +20,7 @@ type AuthState = {
 export const useAuthStore = create<AuthState>((set) => ({
   accessToken: null,
   refreshToken: null,
+  user: null,
   isReady: false,
   isAuthenticated: false,
 
@@ -32,14 +36,39 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
+  setUser: async (user) => {
+  set((state) => {
+    const mergedUser = {
+      ...state.user,
+      ...user,
+    };
+
+    storage.set("user", mergedUser);
+
+    return {
+      user: mergedUser,
+      };
+    });
+  },
+
+  loadUser: async () => {
+    const user = await storage.get<any>("user");
+
+    set({
+      user: user || null,
+    });
+  },
+
   loadTokens: async () => {
     try {
       const accessToken = await storage.get<string>("access_token");
       const refreshToken = await storage.get<string>("refresh_token");
+      const user = await storage.get<any>("user");
 
       set({
         accessToken,
         refreshToken,
+        user: user || null,
         isReady: true,
         isAuthenticated: !!accessToken && !!refreshToken,
       });
@@ -49,6 +78,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         accessToken: null,
         refreshToken: null,
+        user: null,
         isReady: true,
         isAuthenticated: false,
       });
@@ -58,10 +88,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   clearTokens: async () => {
     await storage.remove("access_token");
     await storage.remove("refresh_token");
+    await storage.remove("user");
 
     set({
       accessToken: null,
       refreshToken: null,
+      user: null,
       isReady: true,
       isAuthenticated: false,
     });
@@ -69,12 +101,15 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     await clearAllCachedPdfs();
+
     await storage.remove("access_token");
     await storage.remove("refresh_token");
+    await storage.remove("user");
 
     set({
       accessToken: null,
       refreshToken: null,
+      user: null,
       isReady: true,
       isAuthenticated: false,
     });
