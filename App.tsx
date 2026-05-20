@@ -11,8 +11,18 @@ import SplashScreen from "./src/screens/extrascreens/SplashScreen";
 
 import { useAuthStore } from "./src/store/auth.store";
 import { useAppStore } from "./src/store/app.store";
+import notifee, { EventType } from "@notifee/react-native";
 
 import { initDatabase } from "./src/db/database";
+
+notifee.registerForegroundService(() => {
+  return new Promise(() => {});
+});
+
+notifee.onBackgroundEvent(async ({ type, detail }) => {
+  if (type === EventType.PRESS) {
+  }
+});
 
 export default function App() {
   const [showCustomSplash, setShowCustomSplash] = useState(true);

@@ -35,6 +35,29 @@ export default function HomeScreen({ navigation }: any) {
       >
         <ContinueLearningCard />
 
+        <Pressable
+          style={styles.studyRoomCard}
+          onPress={() => navigation.navigate("StudyRoom")}
+        >
+          <View style={styles.studyLeft}>
+            <View style={styles.studyIconBox}>
+              <Ionicons name="timer-outline" size={28} color="#FFFFFF" />
+            </View>
+
+            <View style={styles.studyTextBox}>
+              <Text style={styles.studyTag}>LIVE FOCUS MODE</Text>
+              <Text style={styles.studyTitle}>Focus Study Room</Text>
+              <Text style={styles.studySubtitle}>
+                Join live study room, start timer & see students studying now.
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.studyArrowBox}>
+            <Ionicons name="chevron-forward" size={22} color="#FFFFFF" />
+          </View>
+        </Pressable>
+
         <View style={styles.quickSection}>
           <SectionTitle title="Quick Actions" subtitle="Start learning instantly" />
 
@@ -106,7 +129,6 @@ export default function HomeScreen({ navigation }: any) {
 
           <Ionicons name="chevron-forward" size={22} color="#2563EB" />
         </Pressable>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -136,6 +158,76 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 14,
     paddingBottom: 42,
+  },
+
+  studyRoomCard: {
+    marginTop: 8,
+    marginBottom: 18,
+    borderRadius: 30,
+    padding: 18,
+    backgroundColor: "#111827",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#111827",
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 7,
+    borderWidth: 1,
+    borderColor: "#1F2937",
+  },
+
+  studyLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  studyIconBox: {
+    width: 62,
+    height: 62,
+    borderRadius: 24,
+    backgroundColor: "#22C55E",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 14,
+  },
+
+  studyTextBox: {
+    flex: 1,
+  },
+
+  studyTag: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: "#86EFAC",
+    letterSpacing: 0.8,
+    marginBottom: 5,
+  },
+
+  studyTitle: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+
+  studySubtitle: {
+    marginTop: 5,
+    fontSize: 12.5,
+    fontWeight: "700",
+    color: "#CBD5E1",
+    lineHeight: 17,
+  },
+
+  studyArrowBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.13)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 10,
   },
 
   quickSection: {

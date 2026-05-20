@@ -42,6 +42,7 @@ import ExploreScholarshipScreen from "../screens/scholarshipscreens/Exploreschol
 import GroupChatScreen from "../screens/chatscreens/GroupChatScreen";
 import MyMentor from "../screens/mentorshipscreens/MyMentor"
 import CheckoutScreen from "../screens/checkout/CheckoutScreen";
+import StudyRoomScreen from "../screens/toolscreens/StudyRoomScreen";
 import Contact from "../screens/extrascreens/Contact"
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -218,6 +219,11 @@ function BottomTabs() {
             name="Study Tools"
             component={ToolPage}
             options={{ headerShown: true }}
+          />
+          <Stack.Screen
+            name="StudyRoom"
+            component={StudyRoomScreen}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="Scholarship"
