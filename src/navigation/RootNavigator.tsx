@@ -43,6 +43,7 @@ import GroupChatScreen from "../screens/chatscreens/GroupChatScreen";
 import MyMentor from "../screens/mentorshipscreens/MyMentor"
 import CheckoutScreen from "../screens/checkout/CheckoutScreen";
 import StudyRoomScreen from "../screens/toolscreens/StudyRoomScreen";
+import StudyMaterialScreen from "../screens/ebookscreens/StudyMaterialScreen";
 import Contact from "../screens/extrascreens/Contact"
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -99,7 +100,7 @@ function BottomTabs() {
       <Tab.Screen
         name="Ebook"
         component={EbookSeriesScreen}
-        options={{ title: "Ebook Library", tabBarLabel: "Ebooks" }}
+        options={{ title: "Ebook Series", tabBarLabel: "Ebooks" }}
       />
 
       <Tab.Screen
@@ -171,7 +172,7 @@ function BottomTabs() {
             <Stack.Screen
               name="EbookSeries"
               component={EbookSeriesScreen}
-              options={{ headerShown: true, title: "Ebook Library" }}
+              options={{ headerShown: true, title: "Ebook Series" }}
             />
 
             <Stack.Screen
@@ -185,6 +186,11 @@ function BottomTabs() {
               name="EbookPageViewer"
               component={EbookPageViewer}
               options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="StudyMaterial"
+              component={StudyMaterialScreen}
+              options={{ headerShown: true, title: "Study Material" }}
             />
          
             <Stack.Screen

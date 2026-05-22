@@ -1,6 +1,4 @@
-// src/screens/HomeScreen.tsx
 
-import React from "react";
 import {
   View,
   ScrollView,
@@ -10,7 +8,9 @@ import {
   Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-
+import React, { useEffect, useRef } from "react";
+import { Animated } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import HomeHeader from "../components/home/HomeHeader";
 import ContinueLearningCard from "../components/home/ContinueCard";
 import QuickActionCard from "../components/home/QuickActionCard";
@@ -18,6 +18,23 @@ import SectionTitle from "../components/home/SectionTitle";
 import Tools from "../components/home/Tools";
 
 export default function HomeScreen({ navigation }: any) {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+useEffect(() => {
+  Animated.loop(
+    Animated.sequence([
+      Animated.timing(pulseAnim, {
+        toValue: 1.12,
+        duration: 700,
+        useNativeDriver: true,
+      }),
+      Animated.timing(pulseAnim, {
+        toValue: 1,
+        duration: 700,
+        useNativeDriver: true,
+      }),
+    ])
+  ).start();
+}, []);
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.fixedHeader}>
@@ -107,6 +124,66 @@ export default function HomeScreen({ navigation }: any) {
         <View style={styles.toolsSoftWrap}>
           <Tools navigation={navigation} />
         </View>
+        <Pressable
+          style={styles.studyMaterialCard}
+          onPress={() => navigation.navigate("StudyMaterial")}
+        >
+          <LinearGradient
+            colors={["#FFFFFF", "#F8FAFC", "#FFFFFF"]}
+            style={styles.studyMaterialGradient}
+          >
+            <View style={styles.blurCircle1} />
+            <View style={styles.blurCircle2} />
+
+            <Animated.View
+              style={[
+                styles.freeBadge,
+                { transform: [{ scale: pulseAnim }] },
+              ]}
+            >
+              <LinearGradient
+                colors={["#2563EB", "#60A5FA", "#2563EB"]}
+                style={styles.freeGradient}
+              >
+                <Ionicons name="sparkles" size={13} color="#FFFFFF" />
+                <Text style={styles.freeText}>FREE</Text>
+              </LinearGradient>
+            </Animated.View>
+
+            <View style={styles.materialIconBox}>
+              <LinearGradient
+                colors={["#DBEAFE", "#EFF6FF"]}
+                style={styles.iconGradient}
+              >
+                <Ionicons name="library-outline" size={30} color="#2563EB" />
+              </LinearGradient>
+            </View>
+
+            <View style={styles.materialTextBox}>
+              <Text style={styles.materialTag}>STUDY RESOURCES</Text>
+              <Text style={styles.materialTitle}>Study Material</Text>
+              <Text style={styles.materialSubtitle}>
+                Notes, PDFs, formulas, PYQs and revision material in one place.
+              </Text>
+
+              <View style={styles.bottomPills}>
+                <View style={styles.pill}>
+                  <Ionicons name="document-text-outline" size={11} color="#2563EB" />
+                  <Text style={styles.pillText}>Notes</Text>
+                </View>
+
+                <View style={styles.pill}>
+                  <Ionicons name="flash-outline" size={11} color="#2563EB" />
+                  <Text style={styles.pillText}>Revision</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={styles.arrowButton}>
+              <Ionicons name="chevron-forward" size={21} color="#2563EB" />
+            </View>
+          </LinearGradient>
+        </Pressable>
 
         <SectionTitle title="Featured" subtitle="Recommended for you" />
 
@@ -367,4 +444,151 @@ const styles = StyleSheet.create({
     marginTop: 5,
     lineHeight: 18,
   },
+studyMaterialCard: {
+  marginBottom: 24,
+  borderRadius: 34,
+  shadowColor: "#2563EB",
+  shadowOpacity: 0.13,
+  shadowRadius: 22,
+  shadowOffset: { width: 0, height: 12 },
+  elevation: 8,
+},
+
+studyMaterialGradient: {
+  borderRadius: 34,
+  padding: 18,
+  flexDirection: "row",
+  alignItems: "center",
+  overflow: "hidden",
+  borderWidth: 1.5,
+  borderColor: "#DBEAFE",
+  backgroundColor: "#FFFFFF",
+  position: "relative",
+},
+
+blurCircle1: {
+  position: "absolute",
+  width: 120,
+  height: 120,
+  borderRadius: 60,
+  backgroundColor: "rgba(37,99,235,0.06)",
+  top: -45,
+  right: -25,
+},
+
+blurCircle2: {
+  position: "absolute",
+  width: 90,
+  height: 90,
+  borderRadius: 45,
+  backgroundColor: "rgba(59,130,246,0.07)",
+  bottom: -30,
+  left: -20,
+},
+
+freeBadge: {
+  position: "absolute",
+  top: 10,
+  right: 12,
+  zIndex: 20,
+},
+
+freeGradient: {
+  paddingHorizontal: 13,
+  paddingVertical: 6,
+  borderRadius: 999,
+  flexDirection: "row",
+  alignItems: "center",
+  shadowColor: "#2563EB",
+  shadowOpacity: 0.35,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 5 },
+  elevation: 8,
+},
+
+freeText: {
+  marginLeft: 5,
+  color: "#FFFFFF",
+  fontSize: 11,
+  fontWeight: "900",
+  letterSpacing: 1.1,
+},
+
+materialIconBox: {
+  marginRight: 14,
+},
+
+iconGradient: {
+  width: 66,
+  height: 66,
+  borderRadius: 24,
+  alignItems: "center",
+  justifyContent: "center",
+  borderWidth: 1,
+  borderColor: "#DBEAFE",
+},
+
+materialTextBox: {
+  flex: 1,
+  paddingRight: 6,
+},
+
+materialTag: {
+  fontSize: 10.5,
+  fontWeight: "900",
+  color: "#2563EB",
+  letterSpacing: 1,
+  marginBottom: 5,
+},
+
+materialTitle: {
+  fontSize: 20,
+  fontWeight: "900",
+  color: "#0F172A",
+},
+
+materialSubtitle: {
+  marginTop: 5,
+  fontSize: 12.5,
+  lineHeight: 18,
+  color: "#64748B",
+  fontWeight: "700",
+},
+
+bottomPills: {
+  flexDirection: "row",
+  marginTop: 12,
+},
+
+pill: {
+  flexDirection: "row",
+  alignItems: "center",
+  backgroundColor: "#F8FAFC",
+  borderWidth: 1,
+  borderColor: "#E2E8F0",
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  borderRadius: 999,
+  marginRight: 8,
+},
+
+pillText: {
+  marginLeft: 4,
+  fontSize: 10.5,
+  fontWeight: "800",
+  color: "#2563EB",
+},
+
+arrowButton: {
+  width: 40,
+  height: 40,
+  borderRadius: 16,
+  backgroundColor: "#F8FAFC",
+  borderWidth: 1,
+  borderColor: "#E2E8F0",
+  alignItems: "center",
+  justifyContent: "center",
+  marginLeft: 10,
+},
+
 });

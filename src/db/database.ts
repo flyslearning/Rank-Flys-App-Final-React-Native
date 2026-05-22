@@ -22,7 +22,16 @@ export function initDatabase() {
       files_count INTEGER,
       cached_at INTEGER
     );
-
+    CREATE TABLE IF NOT EXISTS study_material_series (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT,
+      description TEXT,
+      explore_text TEXT,
+      image_url TEXT,
+      created_at TEXT,
+      goal_class_id TEXT,
+      cached_at INTEGER
+    );
     CREATE TABLE IF NOT EXISTS ebook_nodes (
       id TEXT PRIMARY KEY NOT NULL,
       series_id TEXT,

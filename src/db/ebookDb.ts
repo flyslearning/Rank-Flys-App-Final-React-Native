@@ -296,4 +296,60 @@ getSeriesAccess(seriesId: string) {
     isFree: row?.is_free === 1,
   };
 },
+saveStudyMaterial(items: CachedEbookSeries[]) {
+  this.init();
+
+  db.withTransactionSync(() => {
+    db.runSync(`DELETE FROM study_material_series`);
+
+    const stmt = db.prepareSync(`
+      INSERT OR REPLACE INTO study_material_series
+      (
+        id, title, description, explore_text,
+        image_url, created_at, goal_class_id, cached_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    try {
+      items.forEach((item) => {
+        stmt.executeSync([
+          item.id,
+          item.title || "",
+          item.description || "",
+          item.explore_text || "",
+          item.image_url || "",
+          item.created_at || "",
+          item.goal_class_id || "",
+          Date.now(),
+        ]);
+      });
+    } finally {
+      stmt.finalizeSync();
+    }
+  });
+},
+
+getStudyMaterial(): CachedEbookSeries[] {
+  this.init();
+
+  const rows = db.getAllSync<any>(`
+    SELECT * FROM study_material_series
+    ORDER BY datetime(created_at) DESC
+  `);
+
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title || "",
+    description: row.description || "",
+    explore_text: row.explore_text || "",
+    image_url: row.image_url || "",
+    created_at: row.created_at || "",
+    goal_class_id: row.goal_class_id || "",
+    price: 0,
+    price_paise: 0,
+    has_access: true,
+    is_free: true,
+  }));
+},
 };

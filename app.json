@@ -2,7 +2,7 @@
   "expo": {
     "name": "Rank Flys",
     "slug": "rank-flys-app",
-    "version": "6.0.17",
+    "version": "6.0.18",
     "orientation": "portrait",
     "icon": "./src/assets/images/icon.png",
     "userInterfaceStyle": "light",

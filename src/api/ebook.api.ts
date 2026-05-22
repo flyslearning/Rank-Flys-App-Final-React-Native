@@ -4,7 +4,9 @@ export const EbookAPI = {
   getSeries() {
     return ebookClient.get("/ebook-series");
   },
-
+  getStudyMaterial() {
+  return ebookClient.get("/study-material");
+  },
   getSeriesDetail(seriesId: string) {
     return ebookClient.get(`/ebook-series/${seriesId}`);
   },

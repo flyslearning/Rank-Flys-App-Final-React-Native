@@ -806,44 +806,70 @@ export default function GroupChatScreen() {
 }
 
 const Bubble = memo(({ item, isMine }: { item: Msg; isMine: boolean }) => {
-  const name = item.user_name || item.name || "Student";
-  const body = item.body || item.message || "";
-  const isVerified = isTeacherOrAdmin(item);
-  const roleLabel = prettyRole(item);
+const roleLabel = prettyRole(item);
+const isAdmin = roleLabel === "Admin";
+const isTeacher = roleLabel === "Teacher";
+const isVerified = isAdmin || isTeacher;
+
+const realName = item.user_name || item.name || "Student";
+const name = isAdmin ? "Admin" : realName;
+
+const body = item.body || item.message || "";
 
   return (
     <View style={[styles.row, isMine ? styles.myRow : styles.otherRow]}>
       {!isMine && (
-        <View style={[styles.avatar, isVerified && styles.verifiedAvatar]}>
-          <Text style={[styles.avatarText, isVerified && styles.verifiedAvatarText]}>
-            {String(name).charAt(0).toUpperCase()}
-          </Text>
-        </View>
-      )}
+  <>
+    {isAdmin ? (
+      <View style={styles.adminSideBadge}>
+        <Ionicons name="shield-checkmark" size={18} color="#B91C1C" />
+      </View>
+    ) : (
+      <View style={[styles.avatar, isTeacher && styles.verifiedAvatar]}>
+        <Text style={[styles.avatarText, isTeacher && styles.verifiedAvatarText]}>
+          {String(name).charAt(0).toUpperCase()}
+        </Text>
+      </View>
+    )}
+  </>
+)}
 
       <View
         style={[
           styles.bubble,
           isMine ? styles.myBubble : styles.otherBubble,
-          isVerified && styles.verifiedBubble,
-          isMine && isVerified && styles.myVerifiedBubble,
+          isTeacher && styles.verifiedBubble,
+          isAdmin && styles.adminBubble,
+          isMine && isTeacher && styles.myVerifiedBubble,
+          isMine && isAdmin && styles.myAdminBubble,
         ]}
       >
-        {isVerified && <BlueTickGlow />}
+        {isVerified && <BlueTickGlow color={isAdmin ? "#EF4444" : "#2563EB"} />}
 
         {!isMine && (
           <View style={styles.nameRow}>
-            <Text style={[styles.name, isVerified && styles.verifiedName]}>
-              {name}
-            </Text>
+            {!isAdmin && (
+              <Text
+                style={[
+                  styles.name,
+                  isTeacher && styles.verifiedName,
+                ]}
+              >
+                {name}
+              </Text>
+            )}
 
             {isVerified && (
-              <View style={styles.roleBadge}>
-                <Ionicons name="checkmark-circle" size={13} color="#FFFFFF" />
-                <Text style={styles.roleBadgeText}>
-                  {roleLabel || "Verified"}
-                </Text>
-              </View>
+              <Animated.View style={[styles.roleBadge, isAdmin && styles.adminRoleBadge]}>
+               <Ionicons
+                    name="shield-checkmark"
+                    size={13}
+                    color={isAdmin ? "#B91C1C" : "#FFFFFF"}
+                  />
+                <Text style={[styles.roleBadgeText, isAdmin && styles.adminRoleBadgeText]}>
+                {roleLabel || "Verified"}
+              </Text>
+              </Animated.View>
             )}
           </View>
         )}
@@ -873,7 +899,8 @@ const Bubble = memo(({ item, isMine }: { item: Msg; isMine: boolean }) => {
           style={[
             styles.time,
             isMine && styles.myTime,
-            isVerified && !isMine && styles.verifiedTime,
+            isTeacher && !isMine && styles.verifiedTime,
+            isAdmin && !isMine && styles.adminTime,
           ]}
         >
           {item.failed
@@ -886,7 +913,8 @@ const Bubble = memo(({ item, isMine }: { item: Msg; isMine: boolean }) => {
     </View>
   );
 });
-const BlueTickGlow = memo(() => {
+const BlueTickGlow = memo(({ color = "#2563EB" }: { color?: string }) => {
+  <Ionicons name="checkmark-done-circle" size={21} color={color} />
   const scale = useRef(new Animated.Value(1)).current;
   const opacity = useRef(new Animated.Value(0.55)).current;
 
@@ -935,7 +963,7 @@ const BlueTickGlow = memo(() => {
         },
       ]}
     >
-      <Ionicons name="checkmark-done-circle" size={21} color="#2563EB" />
+      <Ionicons name="checkmark-done-circle" size={21} color={color} />
     </Animated.View>
   );
 });
@@ -1231,8 +1259,73 @@ roleBadgeText: {
   fontSize: 10,
   fontWeight: "900",
 },
+adminAvatar: {
+  backgroundColor: "#FEE2E2",
+  borderColor: "#F87171",
+  shadowColor: "#DC2626",
+  shadowOpacity: 0.35,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 7,
+},
+
+adminBubble: {
+  backgroundColor: "#FEF2F2",
+  borderColor: "#F87171",
+  borderWidth: 1.6,
+  shadowColor: "#DC2626",
+  shadowOpacity: 0.22,
+  shadowRadius: 13,
+  shadowOffset: { width: 0, height: 5 },
+  elevation: 6,
+},
+
+myAdminBubble: {
+  backgroundColor: "#DC2626",
+  borderColor: "#FCA5A5",
+},
+
+adminName: {
+  color: "#B91C1C",
+},
+
+adminRoleBadge: {
+  backgroundColor: "#FEE2E2",
+  borderWidth: 1,
+  borderColor: "#F87171",
+  shadowColor: "#DC2626",
+  shadowOpacity: 0.35,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 8,
+},
+
+adminRoleBadgeText: {
+  color: "#B91C1C",
+  fontWeight: "900",
+},
+adminSideBadge: {
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  backgroundColor: "#FEE2E2",
+  alignItems: "center",
+  justifyContent: "center",
+  marginRight: 8,
+  borderWidth: 1.5,
+  borderColor: "#F87171",
+  shadowColor: "#DC2626",
+  shadowOpacity: 0.3,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 6,
+},
 
 verifiedMsg: { color: "#0F172A", fontWeight: "700" },
 verifiedTime: { color: "#1D4ED8" },
+adminTime: {
+  color: "#B91C1C",
+  fontWeight: "900",
+},
   sendDisabled: { backgroundColor: "#93C5FD" },
 });

@@ -14,6 +14,7 @@ export type RootStackParamList = {
   Attempts: { testId: string };
   Result: { attemptId: string };
    EbookSeries: undefined;
+   StudyMaterial: undefined;
   EbookNodes: {
     seriesId: string;
     seriesTitle: string;
