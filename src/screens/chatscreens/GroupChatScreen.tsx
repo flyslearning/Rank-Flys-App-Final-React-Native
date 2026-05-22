@@ -18,6 +18,7 @@ import {
   ActivityIndicator,
   StatusBar,
   AppState,
+  Animated,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -53,6 +54,13 @@ type Msg = {
   created_at?: string;
   pending?: boolean;
   failed?: boolean;
+  role?: string;
+  user_role?: string;
+  member_role?: string;
+  sender_role?: string;
+  author_role?: string;
+  profile?: { role?: string; user_role?: string };
+  user?: { role?: string; user_role?: string };
 };
 
 type OnlineUser = {
@@ -156,6 +164,17 @@ export default function GroupChatScreen() {
       ),
     [myUserID, payload, user]
   );
+  const myRole = String(
+  payload?.role ||
+    payload?.user_role ||
+    user?.role ||
+    user?.user_role ||
+    user?.profile?.role ||
+    user?.profile?.user_role ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
 
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -605,6 +624,7 @@ export default function GroupChatScreen() {
       user_name: myName,
       body: text,
       type: "text",
+      role: myRole,
       created_at: new Date().toISOString(),
       pending: true,
     };
@@ -636,7 +656,7 @@ export default function GroupChatScreen() {
         )
       );
     }, 1800);
-  }, [input, status, sendWs, myUserID, myName]);
+  }, [input, status, sendWs, myUserID, myName, myRole]);
 
   const statusMeta = {
     connected: { text: `${onlineCount} online`, color: GREEN },
@@ -669,7 +689,7 @@ export default function GroupChatScreen() {
           </View>
 
           <View style={styles.headerText}>
-            <Text style={styles.title}>Community Chat</Text>
+            <Text style={styles.title}>Connect</Text>
 
             <View style={styles.statusRow}>
               <View style={[styles.dot, { backgroundColor: statusMeta.color }]} />
@@ -788,21 +808,74 @@ export default function GroupChatScreen() {
 const Bubble = memo(({ item, isMine }: { item: Msg; isMine: boolean }) => {
   const name = item.user_name || item.name || "Student";
   const body = item.body || item.message || "";
+  const isVerified = isTeacherOrAdmin(item);
+  const roleLabel = prettyRole(item);
 
   return (
     <View style={[styles.row, isMine ? styles.myRow : styles.otherRow]}>
       {!isMine && (
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
+        <View style={[styles.avatar, isVerified && styles.verifiedAvatar]}>
+          <Text style={[styles.avatarText, isVerified && styles.verifiedAvatarText]}>
             {String(name).charAt(0).toUpperCase()}
           </Text>
         </View>
       )}
 
-      <View style={[styles.bubble, isMine ? styles.myBubble : styles.otherBubble]}>
-        {!isMine && <Text style={styles.name}>{name}</Text>}
-        <Text style={[styles.msg, isMine && styles.myMsg]}>{body}</Text>
-        <Text style={[styles.time, isMine && styles.myTime]}>
+      <View
+        style={[
+          styles.bubble,
+          isMine ? styles.myBubble : styles.otherBubble,
+          isVerified && styles.verifiedBubble,
+          isMine && isVerified && styles.myVerifiedBubble,
+        ]}
+      >
+        {isVerified && <BlueTickGlow />}
+
+        {!isMine && (
+          <View style={styles.nameRow}>
+            <Text style={[styles.name, isVerified && styles.verifiedName]}>
+              {name}
+            </Text>
+
+            {isVerified && (
+              <View style={styles.roleBadge}>
+                <Ionicons name="checkmark-circle" size={13} color="#FFFFFF" />
+                <Text style={styles.roleBadgeText}>
+                  {roleLabel || "Verified"}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {isMine && isVerified && (
+          <View style={[styles.nameRow, styles.myNameRow]}>
+            <View style={styles.roleBadge}>
+              <Ionicons name="checkmark-circle" size={13} color="#FFFFFF" />
+              <Text style={styles.roleBadgeText}>
+                {roleLabel || "Verified"}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        <Text
+          style={[
+            styles.msg,
+            isMine && styles.myMsg,
+            isVerified && !isMine && styles.verifiedMsg,
+          ]}
+        >
+          {body}
+        </Text>
+
+        <Text
+          style={[
+            styles.time,
+            isMine && styles.myTime,
+            isVerified && !isMine && styles.verifiedTime,
+          ]}
+        >
           {item.failed
             ? "Failed"
             : item.pending
@@ -811,6 +884,59 @@ const Bubble = memo(({ item, isMine }: { item: Msg; isMine: boolean }) => {
         </Text>
       </View>
     </View>
+  );
+});
+const BlueTickGlow = memo(() => {
+  const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(0.55)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(scale, {
+            toValue: 1.18,
+            duration: 850,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: 850,
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.sequence([
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 850,
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0.55,
+            duration: 850,
+            useNativeDriver: true,
+          }),
+        ]),
+      ])
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [opacity, scale]);
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={[
+        styles.tickGlow,
+        {
+          opacity,
+          transform: [{ scale }],
+        },
+      ]}
+    >
+      <Ionicons name="checkmark-done-circle" size={21} color="#2563EB" />
+    </Animated.View>
   );
 });
 
@@ -825,6 +951,39 @@ function formatTime(date?: string) {
   } catch {
     return "";
   }
+}
+function getRoleFromMessage(m: Msg) {
+  return String(
+    m.role ||
+      m.user_role ||
+      m.member_role ||
+      m.sender_role ||
+      m.author_role ||
+      m.profile?.role ||
+      m.profile?.user_role ||
+      m.user?.role ||
+      m.user?.user_role ||
+      ""
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function isTeacherOrAdmin(m: Msg) {
+  const role = getRoleFromMessage(m);
+  return (
+    role === "teacher" ||
+    role === "admin" ||
+    role.includes("teacher") ||
+    role.includes("admin")
+  );
+}
+
+function prettyRole(m: Msg) {
+  const role = getRoleFromMessage(m);
+  if (role.includes("admin")) return "Admin";
+  if (role.includes("teacher")) return "Teacher";
+  return "";
 }
 
 const styles = StyleSheet.create({
@@ -1000,5 +1159,80 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 8,
   },
+  verifiedAvatar: {
+  backgroundColor: BLUE,
+  borderColor: "#60A5FA",
+  shadowColor: BLUE,
+  shadowOpacity: 0.28,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 5,
+},
+verifiedAvatarText: { color: "#FFFFFF" },
+
+verifiedBubble: {
+  backgroundColor: "#EFF6FF",
+  borderColor: "#60A5FA",
+  borderWidth: 1.4,
+  shadowColor: BLUE,
+  shadowOpacity: 0.18,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 4,
+},
+myVerifiedBubble: {
+  backgroundColor: BLUE,
+  borderColor: "#93C5FD",
+},
+
+tickGlow: {
+  position: "absolute",
+  right: -8,
+  top: -8,
+  width: 25,
+  height: 25,
+  borderRadius: 13,
+  backgroundColor: "#FFFFFF",
+  alignItems: "center",
+  justifyContent: "center",
+  borderWidth: 1,
+  borderColor: "#BFDBFE",
+  shadowColor: BLUE,
+  shadowOpacity: 0.35,
+  shadowRadius: 9,
+  shadowOffset: { width: 0, height: 3 },
+  elevation: 6,
+  zIndex: 10,
+},
+
+nameRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  flexWrap: "wrap",
+  gap: 6,
+  marginBottom: 4,
+},
+myNameRow: {
+  justifyContent: "flex-end",
+},
+verifiedName: { color: "#1D4ED8" },
+
+roleBadge: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 3,
+  backgroundColor: BLUE,
+  paddingHorizontal: 7,
+  paddingVertical: 3,
+  borderRadius: 999,
+},
+roleBadgeText: {
+  color: "#FFFFFF",
+  fontSize: 10,
+  fontWeight: "900",
+},
+
+verifiedMsg: { color: "#0F172A", fontWeight: "700" },
+verifiedTime: { color: "#1D4ED8" },
   sendDisabled: { backgroundColor: "#93C5FD" },
 });

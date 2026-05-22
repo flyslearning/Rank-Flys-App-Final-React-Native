@@ -270,24 +270,6 @@ export default function EbookSeriesScreen({ navigation }: Props) {
             </View>
           )}
 
-          <View style={styles.imageOverlay} />
-
-          <View style={styles.topBadge}>
-            <Ionicons
-              name={
-                isFree
-                  ? "gift-outline"
-                  : hasAccess
-                  ? "checkmark-circle-outline"
-                  : "lock-closed-outline"
-              }
-              size={15}
-              color="#ffffff"
-            />
-            <Text style={styles.topBadgeText}>
-              {isFree ? "FREE" : hasAccess ? "UNLOCKED" : "PAID"}
-            </Text>
-          </View>
 
           {isLockedPaid && discountPercent > 0 && (
             <View style={styles.discountBadge}>
@@ -548,27 +530,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
     color: "#2563eb",
-  },
-  imageOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,23,42,0.08)",
-  },
-  topBadge: {
-    position: "absolute",
-    left: 14,
-    top: 14,
-    backgroundColor: "#111827",
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  topBadgeText: {
-    marginLeft: 5,
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "900",
   },
   discountBadge: {
     position: "absolute",

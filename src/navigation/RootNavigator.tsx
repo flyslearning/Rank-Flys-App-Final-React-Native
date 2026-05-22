@@ -69,7 +69,7 @@ function BottomTabs() {
           let iconName: keyof typeof Ionicons.glyphMap = "home-outline";
 
           if (route.name === "Home") iconName = "home-outline";
-          if (route.name === "Community") iconName = "people-outline";
+          if (route.name === "Connect") iconName = "people-outline";
           if (route.name === "Flys") iconName = "play-circle-outline";
           if (route.name === "Ebook") iconName = "book-outline";
           if (route.name === "Doubt") iconName = "help-circle-outline";
@@ -86,9 +86,9 @@ function BottomTabs() {
       />
 
       <Tab.Screen
-      name="Community"
+      name="Connect"
       component={GroupChatScreen}
-      options={{ headerShown: false, tabBarLabel: "Community" }}
+      options={{ headerShown: false, tabBarLabel: "Connect" }}
     />
       <Tab.Screen
         name="Flys"
