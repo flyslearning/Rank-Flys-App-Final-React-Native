@@ -44,6 +44,10 @@ import MyMentor from "../screens/mentorshipscreens/MyMentor"
 import CheckoutScreen from "../screens/checkout/CheckoutScreen";
 import StudyRoomScreen from "../screens/toolscreens/StudyRoomScreen";
 import StudyMaterialScreen from "../screens/ebookscreens/StudyMaterialScreen";
+import DateSelectScreen from "../screens/mentorshipslots/DateTimeSelectScreen";
+import BookingReviewScreen from "../screens/mentorshipslots/BookingReviewScreen";
+import BookingSuccessScreen from "../screens/mentorshipslots/BookingSuccessScreen";
+import MyBookingsScreen from "../screens/mentorshipslots/MyBookingsScreen";
 import Contact from "../screens/extrascreens/Contact"
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -269,6 +273,10 @@ function BottomTabs() {
               animation: "slide_from_right",
             }}
           />
+          <Stack.Screen name="DateSelect" component={DateSelectScreen} />
+          <Stack.Screen name="BookingReview" component={BookingReviewScreen} />
+          <Stack.Screen name="BookingSuccess" component={BookingSuccessScreen} />
+          <Stack.Screen name="MyBookings" component={MyBookingsScreen} />
            </>
           
         )}

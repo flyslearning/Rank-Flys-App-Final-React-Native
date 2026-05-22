@@ -88,28 +88,30 @@ export const mentorshipDb = {
         db.runSync(
           `
           INSERT OR REPLACE INTO mentorships (
-            id, title, description, image_url, explore_text,
-            goal_class_id, visibility, created_at,
-            price_paise, price_rupees, is_free, has_access
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `,
-          [
-            m.id,
-            m.title,
-            m.description,
-            m.image_url,
-            m.explore_text,
-            m.goal_class_id,
-            m.visibility,
-            m.created_at,
-            m.price_paise,
-            m.price_rupees,
-            m.original_price_paise,
-            m.discount_price_paise,
-            m.discount_percent,
-            m.is_free ? 1 : 0,
-            m.has_access ? 1 : 0,
-          ]
+          id, title, description, image_url, explore_text,
+          goal_class_id, visibility, created_at,
+          price_paise, price_rupees,
+          original_price_paise, discount_price_paise, discount_percent,
+          is_free, has_access
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  `,
+                  [
+          m.id,
+          m.title,
+          m.description,
+          m.image_url,
+          m.explore_text,
+          m.goal_class_id,
+          m.visibility,
+          m.created_at,
+          m.price_paise,
+          m.price_rupees,
+          m.original_price_paise,
+          m.discount_price_paise,
+          m.discount_percent,
+          m.is_free ? 1 : 0,
+          m.has_access ? 1 : 0,
+        ]
         );
 
         m.items.forEach((item) => {

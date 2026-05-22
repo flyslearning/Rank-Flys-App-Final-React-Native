@@ -181,6 +181,14 @@ CREATE TABLE IF NOT EXISTS test_questions (
     created_at TEXT,
     cached_at INTEGER
   );
+  CREATE TABLE IF NOT EXISTS mentorship_booking_plans (
+  id TEXT PRIMARY KEY NOT NULL,
+  title TEXT,
+  description TEXT,
+  duration_minutes INTEGER DEFAULT 0,
+  price_paise INTEGER DEFAULT 0,
+  cached_at INTEGER
+  );
 
   CREATE INDEX IF NOT EXISTS idx_chat_messages_goal_created
   ON chat_messages(goal_class_id, created_at);

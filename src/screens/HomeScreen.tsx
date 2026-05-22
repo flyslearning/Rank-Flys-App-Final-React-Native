@@ -16,6 +16,7 @@ import ContinueLearningCard from "../components/home/ContinueCard";
 import QuickActionCard from "../components/home/QuickActionCard";
 import SectionTitle from "../components/home/SectionTitle";
 import Tools from "../components/home/Tools";
+import MentorshipPlansSlider from "../components/mentorshipslots/MentorshipPlansSlider";
 
 export default function HomeScreen({ navigation }: any) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -51,7 +52,6 @@ useEffect(() => {
         showsVerticalScrollIndicator={false}
       >
         <ContinueLearningCard />
-
         <View style={styles.quickSection}>
           <SectionTitle title="Quick Actions" subtitle="Start learning instantly" />
 
@@ -124,6 +124,7 @@ useEffect(() => {
         <View style={styles.toolsSoftWrap}>
           <Tools navigation={navigation} />
         </View>
+         <MentorshipPlansSlider navigation={navigation} />
         <Pressable
           style={styles.studyMaterialCard}
           onPress={() => navigation.navigate("StudyMaterial")}
