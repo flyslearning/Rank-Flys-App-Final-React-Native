@@ -282,37 +282,70 @@ getNodes(seriesId: string, parentId: string | null): CachedEbookNode[] {
 getSeriesAccess(seriesId: string) {
   this.init();
 
-  const row = db.getFirstSync<any>(
-    `
-    SELECT has_access, is_free
-    FROM ebook_series
-    WHERE id = ?
-    `,
+  const ebook = db.getFirstSync<any>(
+    `SELECT has_access, is_free FROM ebook_series WHERE id = ?`,
     [seriesId]
   );
 
+  if (ebook) {
+    return {
+      hasAccess: ebook.has_access === 1,
+      isFree: ebook.is_free === 1,
+    };
+  }
+
+  const study = db.getFirstSync<any>(
+    `SELECT has_access, is_free FROM study_material_series WHERE id = ?`,
+    [seriesId]
+  );
+
+  if (study) {
+    return {
+      hasAccess: study.has_access === 1,
+      isFree: study.is_free === 1,
+    };
+  }
+
   return {
-    hasAccess: row?.has_access === 1,
-    isFree: row?.is_free === 1,
+    hasAccess: false,
+    isFree: false,
   };
+},
+updateStudyMaterialAccess(seriesId: string, hasAccess: boolean, isFree: boolean) {
+  this.init();
+
+  db.runSync(
+    `
+    UPDATE study_material_series
+    SET has_access = ?, is_free = ?
+    WHERE id = ?
+    `,
+    [hasAccess ? 1 : 0, isFree ? 1 : 0, seriesId]
+  );
 },
 saveStudyMaterial(items: CachedEbookSeries[]) {
   this.init();
 
   db.withTransactionSync(() => {
-    db.runSync(`DELETE FROM study_material_series`);
-
     const stmt = db.prepareSync(`
       INSERT OR REPLACE INTO study_material_series
       (
         id, title, description, explore_text,
-        image_url, created_at, goal_class_id, cached_at
+        image_url, created_at, goal_class_id,
+        price, price_paise, original_price_paise,
+        discount_price_paise, discount_percent,
+        has_access, is_free, files_count, cached_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     try {
       items.forEach((item) => {
+        const old = db.getFirstSync<any>(
+          `SELECT has_access, is_free FROM study_material_series WHERE id = ?`,
+          [item.id]
+        );
+
         stmt.executeSync([
           item.id,
           item.title || "",
@@ -321,6 +354,21 @@ saveStudyMaterial(items: CachedEbookSeries[]) {
           item.image_url || "",
           item.created_at || "",
           item.goal_class_id || "",
+          item.price || 0,
+          item.price_paise || 0,
+          item.original_price_paise || item.price_paise || 0,
+          item.discount_price_paise || item.price_paise || 0,
+          item.discount_percent || 0,
+
+          old?.has_access === 1 || item.has_access === true
+            ? 1
+            : 0,
+
+          old?.is_free === 1 || item.is_free === true
+            ? 1
+            : 0,
+
+          item.filesCount || 0,
           Date.now(),
         ]);
       });
@@ -329,7 +377,6 @@ saveStudyMaterial(items: CachedEbookSeries[]) {
     }
   });
 },
-
 getStudyMaterial(): CachedEbookSeries[] {
   this.init();
 
@@ -346,10 +393,14 @@ getStudyMaterial(): CachedEbookSeries[] {
     image_url: row.image_url || "",
     created_at: row.created_at || "",
     goal_class_id: row.goal_class_id || "",
-    price: 0,
-    price_paise: 0,
-    has_access: true,
-    is_free: true,
+    price: Number(row.price || 0),
+    price_paise: Number(row.price_paise || 0),
+    original_price_paise: Number(row.original_price_paise || row.price_paise || 0),
+    discount_price_paise: Number(row.discount_price_paise || row.price_paise || 0),
+    discount_percent: Number(row.discount_percent || 0),
+    has_access: row.has_access === 1,
+    is_free: row.is_free === 1,
+    filesCount: Number(row.files_count || 0),
   }));
 },
 };

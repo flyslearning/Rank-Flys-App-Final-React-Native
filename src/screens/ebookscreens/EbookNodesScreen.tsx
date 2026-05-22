@@ -108,6 +108,14 @@ export default function EbookNodesScreen({ route, navigation }: Props) {
           res.data?.has_access === 1 ||
           res.data?.is_free === 1;
 
+          const apiHasAccess =
+          res.data?.has_access === true || res.data?.has_access === 1;
+
+          const apiIsFree =
+            res.data?.is_free === true || res.data?.is_free === 1;
+
+          EbookDb.updateStudyMaterialAccess(seriesId, apiHasAccess, apiIsFree);
+
         const normalizedNodes: EbookNode[] = apiNodes.map((item: any) => ({
           ...item,
           id: item.id,

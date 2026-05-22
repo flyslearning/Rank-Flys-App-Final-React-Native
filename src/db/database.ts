@@ -23,14 +23,22 @@ export function initDatabase() {
       cached_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS study_material_series (
-      id TEXT PRIMARY KEY NOT NULL,
-      title TEXT,
-      description TEXT,
-      explore_text TEXT,
-      image_url TEXT,
-      created_at TEXT,
-      goal_class_id TEXT,
-      cached_at INTEGER
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT,
+    description TEXT,
+    explore_text TEXT,
+    image_url TEXT,
+    created_at TEXT,
+    goal_class_id TEXT,
+    price REAL,
+    price_paise INTEGER,
+    original_price_paise INTEGER DEFAULT 0,
+    discount_price_paise INTEGER DEFAULT 0,
+    discount_percent INTEGER DEFAULT 0,
+    has_access INTEGER DEFAULT 0,
+    is_free INTEGER DEFAULT 0,
+    files_count INTEGER,
+    cached_at INTEGER
     );
     CREATE TABLE IF NOT EXISTS ebook_nodes (
       id TEXT PRIMARY KEY NOT NULL,
