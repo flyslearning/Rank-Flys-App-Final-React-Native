@@ -1,0 +1,63 @@
+# General
+node_modules/
+.DS_Store
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Fastlane
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# Bundle
+*.jsbundle
+
+# Android
+.gradle
+/android/app/build
+/android/build
+/android/captures
+/android/.cxx
+/android/.externalNativeBuild
+*.iml
+.idea
+/android/local.properties
+*.keystore
+!/android/app/debug.keystore
+
+# iOS
+ios/build/
+ios/DerivedData/
+ios/Pods/
+ios/IPHONEOS_DEPLOYMENT_TARGET
+ios/.xcode.env.local
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.xcuserstate
+
+# Expo (if using Expo)
+.expo/
+dist/
+web-build/
+
+# Testing
+/coverage
