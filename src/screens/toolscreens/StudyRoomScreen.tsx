@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
+import Svg, { Circle } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 
@@ -47,6 +48,11 @@ const SOFT_ORANGE = "#FFF7ED";
 
 const STUDY_ACTIVE_KEY = "study_room_active";
 const STUDY_STARTED_AT_KEY = "study_room_started_at";
+const STUDY_PAUSED_KEY = "study_room_paused";
+const STUDY_ACTIVE_DURATION_KEY = "study_room_active_duration";
+const STUDY_LAST_RESUME_AT_KEY = "study_room_last_resume_at";
+const STUDY_TOTAL_PAUSE_SECONDS_KEY = "study_room_total_pause_seconds";
+const STUDY_PAUSE_STARTED_AT_KEY = "study_room_pause_started_at";
 
 type Status = "connecting" | "connected" | "reconnecting" | "offline";
 
@@ -103,6 +109,13 @@ function formatDuration(startedAt?: number) {
   const m = min % 60;
 
   return `${h}h ${m}m`;
+}
+function getLocalDateKey(time = Date.now()) {
+  const d = new Date(time);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function getUsersFromSocketPayload(data: any): StudyUser[] {
@@ -223,6 +236,116 @@ function AnimatedStudentCard({
     </Animated.View>
   );
 }
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+function FocusCircularClock({
+  seconds,
+  isStudying,
+  isPaused,
+}: {
+  seconds: number;
+  isStudying: boolean;
+  isPaused: boolean;
+}) {
+  const rotate = useRef(new Animated.Value(0)).current;
+  const breathe = useRef(new Animated.Value(1)).current;
+
+  const size = 245;
+  const stroke = 14;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = (seconds % 60) / 60;
+  const dashOffset = circumference - circumference * progress;
+
+  useEffect(() => {
+    if (!isStudying || isPaused) {
+      rotate.stopAnimation();
+      breathe.stopAnimation();
+      Animated.spring(breathe, {
+        toValue: 1,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
+    const spinAnim = Animated.loop(
+      Animated.timing(rotate, {
+        toValue: 1,
+        duration: 5000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+
+    const breatheAnim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathe, {
+          toValue: 1.045,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(breathe, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    rotate.setValue(0);
+    spinAnim.start();
+    breatheAnim.start();
+
+    return () => {
+      spinAnim.stop();
+      breatheAnim.stop();
+    };
+  }, [isStudying, isPaused, rotate, breathe]);
+
+  const spin = rotate.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  return (
+    <Animated.View style={[styles.clockWrap, { transform: [{ scale: breathe }] }]}>
+      <Animated.View style={[styles.clockGlow, { transform: [{ rotate: spin }] }]} />
+
+      <Svg width={size} height={size}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="#E0EAFF"
+          strokeWidth={stroke}
+          fill="transparent"
+        />
+
+        <AnimatedCircle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={isPaused ? ORANGE : isStudying ? GREEN : BLUE}
+          strokeWidth={stroke}
+          fill="transparent"
+          strokeLinecap="round"
+          strokeDasharray={`${circumference} ${circumference}`}
+          strokeDashoffset={dashOffset}
+          rotation="-90"
+          originX={size / 2}
+          originY={size / 2}
+        />
+      </Svg>
+
+      <View style={styles.clockCenter}>
+        <Text style={styles.clockTime}>{formatStudyTime(seconds)}</Text>
+        <Text style={styles.clockText}>
+          {isStudying ? (isPaused ? "PAUSED" : "FOCUSING") : "READY"}
+        </Text>
+      </View>
+    </Animated.View>
+  );
+}
 
 export default function StudyRoomScreen() {
   const insets = useSafeAreaInsets();
@@ -289,6 +412,8 @@ export default function StudyRoomScreen() {
   const sessionStartedAtRef = useRef<number | null>(null);
   const activeDurationRef = useRef(0);
   const lastResumeAtRef = useRef<number | null>(null);
+  const totalPauseSecondsRef = useRef(0);
+  const pauseStartedAtRef = useRef<number | null>(null);
 
   const pulse = useRef(new Animated.Value(1)).current;
   const fade = useRef(new Animated.Value(0)).current;
@@ -363,6 +488,17 @@ export default function StudyRoomScreen() {
     sendWs({ event: "active_students" });
     sendWs({ event: "get_active_students" });
   }, [sendWs]);
+  const persistStudyState = useCallback(async () => {
+  await AsyncStorage.multiSet([
+    [STUDY_ACTIVE_KEY, isStudyingRef.current ? "true" : "false"],
+    [STUDY_STARTED_AT_KEY, String(sessionStartedAtRef.current || "")],
+    [STUDY_PAUSED_KEY, isPausedRef.current ? "true" : "false"],
+    [STUDY_ACTIVE_DURATION_KEY, String(activeDurationRef.current || 0)],
+    [STUDY_LAST_RESUME_AT_KEY, String(lastResumeAtRef.current || "")],
+    [STUDY_TOTAL_PAUSE_SECONDS_KEY, String(totalPauseSecondsRef.current || 0)],
+    [STUDY_PAUSE_STARTED_AT_KEY, String(pauseStartedAtRef.current || "")],
+  ]);
+}, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -665,31 +801,61 @@ export default function StudyRoomScreen() {
   );
 
   const restoreLocalStudy = useCallback(async () => {
-    const active = await AsyncStorage.getItem(STUDY_ACTIVE_KEY);
-    const savedStartedAt = await AsyncStorage.getItem(STUDY_STARTED_AT_KEY);
+  const values = await AsyncStorage.multiGet([
+    STUDY_ACTIVE_KEY,
+    STUDY_STARTED_AT_KEY,
+    STUDY_PAUSED_KEY,
+    STUDY_ACTIVE_DURATION_KEY,
+    STUDY_LAST_RESUME_AT_KEY,
+    STUDY_TOTAL_PAUSE_SECONDS_KEY,
+    STUDY_PAUSE_STARTED_AT_KEY,
+  ]);
 
-    if (active === "true" && savedStartedAt) {
-      const startTime = Number(savedStartedAt);
+  const map = Object.fromEntries(values);
+  const active = map[STUDY_ACTIVE_KEY];
+  const savedStartedAt = map[STUDY_STARTED_AT_KEY];
 
-      if (startTime > 0) {
-        const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+  if (active === "true" && savedStartedAt) {
+    const startTime = Number(savedStartedAt);
+    const paused = map[STUDY_PAUSED_KEY] === "true";
+    const savedActiveDuration = Number(map[STUDY_ACTIVE_DURATION_KEY] || 0);
+    const savedLastResumeAt = Number(map[STUDY_LAST_RESUME_AT_KEY] || 0);
+    const savedTotalPause = Number(map[STUDY_TOTAL_PAUSE_SECONDS_KEY] || 0);
+    const savedPauseStartedAt = Number(map[STUDY_PAUSE_STARTED_AT_KEY] || 0);
 
-        sessionStartedAtRef.current = startTime;
-        activeDurationRef.current = elapsed;
-        lastResumeAtRef.current = Date.now();
+    if (startTime > 0) {
+      sessionStartedAtRef.current = startTime;
+      activeDurationRef.current = savedActiveDuration;
+      totalPauseSecondsRef.current = savedTotalPause;
 
-        isStudyingRef.current = true;
-        isPausedRef.current = false;
+      isStudyingRef.current = true;
+      isPausedRef.current = paused;
 
-        setIsStudying(true);
-        setIsPaused(false);
-        setStudySeconds(elapsed);
+      if (paused) {
+        lastResumeAtRef.current = null;
+        pauseStartedAtRef.current = savedPauseStartedAt || Date.now();
 
+        setStudySeconds(savedActiveDuration);
+        stopTimer();
+      } else {
+        lastResumeAtRef.current = savedLastResumeAt || Date.now();
+        pauseStartedAtRef.current = null;
+
+        const elapsed =
+          savedActiveDuration +
+          Math.floor((Date.now() - lastResumeAtRef.current) / 1000);
+
+        setStudySeconds(Math.max(0, elapsed));
         startActiveTimer();
-        await startStudyNotification(myName, startTime);
       }
+
+      setIsStudying(true);
+      setIsPaused(paused);
+
+      await startStudyNotification(myName, startTime);
     }
-  }, [myName, startActiveTimer]);
+  }
+}, [myName, startActiveTimer, stopTimer]);
 
   const openStudyRoom = useCallback(async () => {
     if (!token || !goalClassID) {
@@ -746,15 +912,25 @@ export default function StudyRoomScreen() {
     setIsPaused(false);
     setStudySeconds(0);
 
-    await AsyncStorage.setItem(STUDY_ACTIVE_KEY, "true");
-    await AsyncStorage.setItem(STUDY_STARTED_AT_KEY, String(now));
+    totalPauseSecondsRef.current = 0;
+    pauseStartedAtRef.current = null;
+
+    await persistStudyState();
 
     startActiveTimer();
     requestActiveStudents();
     await startStudyNotification(myName, now);
-  }, [status, sendWs, userDp, myName, startActiveTimer, requestActiveStudents]);
+      }, [
+      status,
+      sendWs,
+      userDp,
+      myName,
+      startActiveTimer,
+      requestActiveStudents,
+      persistStudyState,
+    ]);
 
-  const pauseStudy = useCallback(() => {
+  const pauseStudy = useCallback(async () => {
     if (!isStudyingRef.current || isPausedRef.current) return;
 
     if (lastResumeAtRef.current) {
@@ -770,12 +946,22 @@ export default function StudyRoomScreen() {
     setStudySeconds(activeDurationRef.current);
 
     stopTimer();
+    pauseStartedAtRef.current = Date.now();
+    await persistStudyState();
     sendWs({ event: "study_pause" });
     requestActiveStudents();
-  }, [sendWs, stopTimer, requestActiveStudents]);
+  }, [sendWs, stopTimer, requestActiveStudents, persistStudyState]);
 
-  const resumeStudy = useCallback(() => {
+  const resumeStudy = useCallback(async () => {
     if (!isStudyingRef.current || !isPausedRef.current) return;
+
+    if (pauseStartedAtRef.current) {
+  totalPauseSecondsRef.current += Math.floor(
+    (Date.now() - pauseStartedAtRef.current) / 1000
+  );
+  }
+
+  pauseStartedAtRef.current = null;
 
     lastResumeAtRef.current = Date.now();
     isPausedRef.current = false;
@@ -789,7 +975,8 @@ export default function StudyRoomScreen() {
     });
 
     requestActiveStudents();
-  }, [sendWs, userDp, startActiveTimer, requestActiveStudents]);
+    await persistStudyState();
+    }, [sendWs, userDp, startActiveTimer, requestActiveStudents, persistStudyState]);
 
   const stopStudy = useCallback(async () => {
     sendWs({ event: "study_stop" });
@@ -798,21 +985,26 @@ export default function StudyRoomScreen() {
     const finalSeconds = getCurrentActiveSeconds();
 
     if (sessionStartedAtRef.current && finalSeconds > 0) {
-      const date = new Date(sessionStartedAtRef.current).toISOString().slice(0, 10);
+      const date = getLocalDateKey(sessionStartedAtRef.current);
 
-      await saveStudySession({
-        date,
-        start_time: sessionStartedAtRef.current,
-        end_time: now,
-        duration_seconds: finalSeconds,
-      });
+     await saveStudySession({
+      date,
+      start_time: sessionStartedAtRef.current,
+      end_time: now,
+      duration_seconds: finalSeconds,
+      total_pause_seconds: totalPauseSecondsRef.current,
+    });
 
+      setTimeout(() => {
       setTodaySeconds(getTodayStudySeconds());
+    }, 150);
     }
 
     sessionStartedAtRef.current = null;
     lastResumeAtRef.current = null;
     activeDurationRef.current = 0;
+    totalPauseSecondsRef.current = 0;
+    pauseStartedAtRef.current = null;
 
     isStudyingRef.current = false;
     isPausedRef.current = false;
@@ -821,8 +1013,15 @@ export default function StudyRoomScreen() {
     setIsPaused(false);
     setStudySeconds(0);
 
-    await AsyncStorage.removeItem(STUDY_ACTIVE_KEY);
-    await AsyncStorage.removeItem(STUDY_STARTED_AT_KEY);
+    await AsyncStorage.multiRemove([
+      STUDY_ACTIVE_KEY,
+      STUDY_STARTED_AT_KEY,
+      STUDY_PAUSED_KEY,
+      STUDY_ACTIVE_DURATION_KEY,
+      STUDY_LAST_RESUME_AT_KEY,
+      STUDY_TOTAL_PAUSE_SECONDS_KEY,
+      STUDY_PAUSE_STARTED_AT_KEY,
+    ]);
 
     stopTimer();
     requestActiveStudents();
@@ -859,7 +1058,14 @@ export default function StudyRoomScreen() {
         closeSocket(true);
 
         if (isStudyingRef.current && !isPausedRef.current) {
+          activeDurationRef.current = getCurrentActiveSeconds();
+          lastResumeAtRef.current = Date.now();
+          await persistStudyState();
           stopTimer();
+        }
+
+        if (isStudyingRef.current && isPausedRef.current) {
+          await persistStudyState();
         }
       }
     });
@@ -919,7 +1125,7 @@ export default function StudyRoomScreen() {
         </View>
 
         <View style={styles.headerText}>
-          <Text style={styles.title}>Focus Study Room</Text>
+          <Text style={styles.title}>Study Room</Text>
 
           <View style={styles.statusRow}>
             <View style={[styles.dot, { backgroundColor: statusMeta.color }]} />
@@ -1007,7 +1213,11 @@ export default function StudyRoomScreen() {
                 </View>
               </View>
 
-              <Text style={styles.timer}>{formatStudyTime(studySeconds)}</Text>
+              <FocusCircularClock
+                seconds={studySeconds}
+                isStudying={isStudying}
+                isPaused={isPaused}
+              />
 
               <Text style={styles.studyStatus}>
                 {isStudying
@@ -1135,7 +1345,7 @@ export default function StudyRoomScreen() {
               ListEmptyComponent={
                 <View style={styles.emptyBox}>
                   <Ionicons name="people-circle-outline" size={58} color={MUTED} />
-                  <Text style={styles.emptyTitle}>No active students yet</Text>
+                  <Text style={styles.emptyTitle}>Start Study Now</Text>
                   <Text style={styles.emptyText}>
                     Connected hote hi active students yaha show honge.
                   </Text>
@@ -1304,14 +1514,19 @@ const styles = StyleSheet.create({
   },
 
   mainButton: {
-    marginTop: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 9,
-    paddingVertical: 15,
-    borderRadius: 20,
-  },
+  marginTop: 22,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 9,
+  paddingVertical: 15,
+  borderRadius: 20,
+  shadowColor: "#0F172A",
+  shadowOpacity: 0.14,
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 7 },
+  elevation: 4,
+},
   secondaryMainButton: { marginTop: 12 },
   startButton: { backgroundColor: GREEN },
   stopButton: { backgroundColor: RED },
@@ -1533,4 +1748,56 @@ const styles = StyleSheet.create({
     color: MUTED,
     textAlign: "center",
   },
+  clockWrap: {
+  marginTop: 22,
+  width: 245,
+  height: 245,
+  alignSelf: "center",
+  alignItems: "center",
+  justifyContent: "center",
+},
+clockTime: {
+  fontSize: 33,
+  fontWeight: "900",
+  color: TEXT,
+  letterSpacing: 0.5,
+},
+clockText: {
+  marginTop: 8,
+  fontSize: 12,
+  fontWeight: "900",
+  color: MUTED,
+  letterSpacing: 1.2,
+},
+clockGlow: {
+  position: "absolute",
+  width: 230,
+  height: 230,
+  borderRadius: 115,
+  backgroundColor: "#DBEAFE",
+  borderWidth: 3,
+  borderColor: "#BFDBFE",
+  shadowColor: "#2563EB",
+  shadowOpacity: 0.28,
+  shadowRadius: 28,
+  shadowOffset: { width: 0, height: 14 },
+  elevation: 8,
+},
+clockCenter: {
+  position: "absolute",
+  width: 178,
+  height: 178,
+  borderRadius: 89,
+  backgroundColor: "#FFFFFF",
+  alignItems: "center",
+  justifyContent: "center",
+  borderWidth: 2,
+  borderColor: "#DBEAFE",
+  shadowColor: "#2563EB",
+  shadowOpacity: 0.2,
+  shadowRadius: 22,
+  shadowOffset: { width: 0, height: 12 },
+  elevation: 8,
+},
+
 });

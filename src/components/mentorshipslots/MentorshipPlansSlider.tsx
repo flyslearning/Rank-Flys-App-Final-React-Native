@@ -137,10 +137,7 @@ export default function MentorshipPlansSlider({ navigation }: any) {
           return (
             <Pressable
               key={plan.id}
-              style={({ pressed }) => [
-                styles.cardOuter,
-                pressed && { transform: [{ scale: 0.97 }] },
-              ]}
+              style={styles.cardOuter}
               onPress={() =>
                 navigation.navigate("DateSelect", {
                   selectedPlan: plan,
@@ -282,15 +279,18 @@ const styles = StyleSheet.create({
   },
 
   slider: {
-    paddingRight: 20,
-    paddingBottom: 4,
-  },
+  paddingLeft: 4,
+  paddingRight: 40,
+  paddingBottom: 10,
+},
 
   cardOuter: {
-    width: CARD_WIDTH,
-    marginRight: 14,
-    borderRadius: 32,
-  },
+  width: CARD_WIDTH,
+  minWidth: CARD_WIDTH,
+  maxWidth: CARD_WIDTH,
+  marginRight: 14,
+  borderRadius: 32,
+},
 
   card: {
     minHeight: 238,
@@ -304,6 +304,7 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 10 },
     elevation: 6,
+    
   },
 
   blurCircleOne: {

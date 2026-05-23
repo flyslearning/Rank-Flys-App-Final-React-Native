@@ -32,6 +32,14 @@ export function initStudySessionTable() {
   } catch {}
 }
 
+function getLocalDateKey(time = Date.now()) {
+  const d = new Date(time);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function saveStudySession(session: StudySession) {
   db.runSync(
     `
@@ -40,7 +48,7 @@ export function saveStudySession(session: StudySession) {
     VALUES (?, ?, ?, ?, ?, ?)
     `,
     [
-      session.date,
+      session.date || getLocalDateKey(session.start_time),
       session.start_time,
       session.end_time,
       session.duration_seconds,
@@ -51,7 +59,7 @@ export function saveStudySession(session: StudySession) {
 }
 
 export function getTodayStudySeconds() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateKey();
 
   const row = db.getFirstSync<{ total: number }>(
     `
