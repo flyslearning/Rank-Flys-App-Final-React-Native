@@ -170,6 +170,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
     return new Promise((resolve, reject) => {
       failedQueue.push({
         resolve: (token: string) => {
+          originalRequest.headers = originalRequest.headers || {};
           originalRequest.headers.Authorization = `Bearer ${token}`;
 
           const client = originalRequest._client || authClient;
@@ -211,7 +212,8 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
 
     processQueue(null, newAccessToken);
 
-    originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+   originalRequest.headers = originalRequest.headers || {};
+   originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
 
     const client = originalRequest._client || authClient;
 
@@ -242,9 +244,21 @@ const attachRefreshInterceptor = (client: AxiosInstance) => {
   client.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
+      const status = error.response?.status;
+      const message = JSON.stringify(error.response?.data || "").toLowerCase();
+
       if (
-        error.response?.status === 401 ||
-        error.response?.status === 403
+        status === 401 ||
+        status === 403 ||
+        (
+          status === 400 &&
+          (
+            message.includes("token") ||
+            message.includes("jwt") ||
+            message.includes("expired") ||
+            message.includes("unauthorized")
+          )
+        )
       ) {
         return refreshTokenAndRetry(error);
       }
