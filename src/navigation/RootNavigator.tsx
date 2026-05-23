@@ -48,6 +48,7 @@ import DateSelectScreen from "../screens/mentorshipslots/DateTimeSelectScreen";
 import BookingReviewScreen from "../screens/mentorshipslots/BookingReviewScreen";
 import BookingSuccessScreen from "../screens/mentorshipslots/BookingSuccessScreen";
 import MyBookingsScreen from "../screens/mentorshipslots/MyBookingsScreen";
+import StudyStatsScreen from "../screens/toolscreens/StudyStatsScreen";
 import Contact from "../screens/extrascreens/Contact"
 import RazorpayWebViewScreen from "../screens/RazorpayWebViewScreen";
 
@@ -285,6 +286,11 @@ function BottomTabs() {
               title: "Payment",
               headerShown: false,
             }}
+          />
+          <Stack.Screen
+            name="StudyStats"
+            component={StudyStatsScreen}
+            options={{ title: "Study Statistics" }}
           />
            </>
           

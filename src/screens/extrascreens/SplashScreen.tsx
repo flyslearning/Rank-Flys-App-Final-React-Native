@@ -9,6 +9,7 @@ import {
 
 import { useAppStore } from "../../store/app.store";
 import { useAuthStore } from "../../store/auth.store";
+import { checkAndMigrateAppData } from "../../utils/version";
 
 export default function SplashScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -18,6 +19,9 @@ export default function SplashScreen() {
   const accessToken = useAuthStore((s) => s.accessToken);
 
   useEffect(() => {
+  const initSplash = async () => {
+    await checkAndMigrateAppData();
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -31,9 +35,11 @@ export default function SplashScreen() {
       }),
     ]).start();
 
-    // 🔥 Debug (optional)
     console.log("Intro seen:", hasSeenIntro);
     console.log("Token:", accessToken);
+  };
+
+    initSplash();
   }, []);
 
   return (

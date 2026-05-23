@@ -1,9 +1,77 @@
 import * as SQLite from "expo-sqlite";
+import { initStudySessionTable } from "./studySessionDb";
 
 export const db = SQLite.openDatabaseSync("app.db");
 
+const DB_SCHEMA_VERSION = 2;
+
+function safeExec(sql: string) {
+  try {
+    db.execSync(sql);
+  } catch (error) {
+    console.log("DB exec error:", sql);
+    console.log(error);
+    throw error;
+  }
+}
+
+function getDbVersion() {
+  const row = db.getFirstSync<{ value: string }>(
+    `SELECT value FROM app_meta WHERE key = ?`,
+    ["db_schema_version"]
+  );
+
+  return row?.value ? Number(row.value) : 0;
+}
+
+function setDbVersion(version: number) {
+  db.runSync(
+    `INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)`,
+    ["db_schema_version", String(version)]
+  );
+}
+
+function resetDatabaseTables() {
+  safeExec(`DROP TABLE IF EXISTS ebook_series;`);
+  safeExec(`DROP TABLE IF EXISTS study_material_series;`);
+  safeExec(`DROP TABLE IF EXISTS ebook_nodes;`);
+  safeExec(`DROP TABLE IF EXISTS test_series;`);
+  safeExec(`DROP TABLE IF EXISTS test_items;`);
+  safeExec(`DROP TABLE IF EXISTS test_questions;`);
+  safeExec(`DROP TABLE IF EXISTS sync_meta;`);
+  safeExec(`DROP TABLE IF EXISTS tool_subjects;`);
+  safeExec(`DROP TABLE IF EXISTS tool_chapters;`);
+  safeExec(`DROP TABLE IF EXISTS tool_topics;`);
+  safeExec(`DROP TABLE IF EXISTS mentorships;`);
+  safeExec(`DROP TABLE IF EXISTS mentorship_items;`);
+  safeExec(`DROP TABLE IF EXISTS chat_messages;`);
+  safeExec(`DROP TABLE IF EXISTS mentorship_booking_plans;`);
+}
+
+function runDbMigrations() {
+  const oldVersion = getDbVersion();
+
+  if (oldVersion >= DB_SCHEMA_VERSION) {
+    return;
+  }
+
+  db.withTransactionSync(() => {
+    resetDatabaseTables();
+    setDbVersion(DB_SCHEMA_VERSION);
+  });
+}
+
 export function initDatabase() {
-  db.execSync(`
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT
+    );
+  `);
+
+  runDbMigrations();
+
+  safeExec(`
     CREATE TABLE IF NOT EXISTS ebook_series (
       id TEXT PRIMARY KEY NOT NULL,
       title TEXT,
@@ -22,24 +90,30 @@ export function initDatabase() {
       files_count INTEGER,
       cached_at INTEGER
     );
+  `);
+
+  safeExec(`
     CREATE TABLE IF NOT EXISTS study_material_series (
-    id TEXT PRIMARY KEY NOT NULL,
-    title TEXT,
-    description TEXT,
-    explore_text TEXT,
-    image_url TEXT,
-    created_at TEXT,
-    goal_class_id TEXT,
-    price REAL,
-    price_paise INTEGER,
-    original_price_paise INTEGER DEFAULT 0,
-    discount_price_paise INTEGER DEFAULT 0,
-    discount_percent INTEGER DEFAULT 0,
-    has_access INTEGER DEFAULT 0,
-    is_free INTEGER DEFAULT 0,
-    files_count INTEGER,
-    cached_at INTEGER
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT,
+      description TEXT,
+      explore_text TEXT,
+      image_url TEXT,
+      created_at TEXT,
+      goal_class_id TEXT,
+      price REAL,
+      price_paise INTEGER,
+      original_price_paise INTEGER DEFAULT 0,
+      discount_price_paise INTEGER DEFAULT 0,
+      discount_percent INTEGER DEFAULT 0,
+      has_access INTEGER DEFAULT 0,
+      is_free INTEGER DEFAULT 0,
+      files_count INTEGER,
+      cached_at INTEGER
     );
+  `);
+
+  safeExec(`
     CREATE TABLE IF NOT EXISTS ebook_nodes (
       id TEXT PRIMARY KEY NOT NULL,
       series_id TEXT,
@@ -55,59 +129,66 @@ export function initDatabase() {
       created_at TEXT,
       cached_at INTEGER
     );
+  `);
 
+  safeExec(`
     CREATE TABLE IF NOT EXISTS test_series (
-  id TEXT PRIMARY KEY NOT NULL,
-  title TEXT,
-  description TEXT,
-  explore_text TEXT,
-  image_url TEXT,
-  created_at TEXT,
-  price REAL,
-  price_paise INTEGER,
-  original_price_paise INTEGER DEFAULT 0,
-  discount_price_paise INTEGER DEFAULT 0,
-  discount_percent INTEGER DEFAULT 0,
-  has_access INTEGER,
-  is_free INTEGER,
-  tests_count INTEGER,
-  cached_at INTEGER
-);
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT,
+      description TEXT,
+      explore_text TEXT,
+      image_url TEXT,
+      created_at TEXT,
+      price REAL,
+      price_paise INTEGER,
+      original_price_paise INTEGER DEFAULT 0,
+      discount_price_paise INTEGER DEFAULT 0,
+      discount_percent INTEGER DEFAULT 0,
+      has_access INTEGER,
+      is_free INTEGER,
+      tests_count INTEGER,
+      cached_at INTEGER
+    );
+  `);
 
-CREATE TABLE IF NOT EXISTS test_items (
-  id TEXT PRIMARY KEY NOT NULL,
-  series_id TEXT,
-  title TEXT,
-  description TEXT,
-  duration_minutes INTEGER,
-  total_questions INTEGER,
-  is_demo INTEGER DEFAULT 0,
-  cached_at INTEGER
-);
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS test_items (
+      id TEXT PRIMARY KEY NOT NULL,
+      series_id TEXT,
+      title TEXT,
+      description TEXT,
+      duration_minutes INTEGER,
+      total_questions INTEGER,
+      is_demo INTEGER DEFAULT 0,
+      cached_at INTEGER
+    );
+  `);
 
-CREATE TABLE IF NOT EXISTS test_questions (
-  id TEXT PRIMARY KEY NOT NULL,
-  test_id TEXT,
-  question_text TEXT,
-  option_a TEXT,
-  option_b TEXT,
-  option_c TEXT,
-  option_d TEXT,
-  correct_answer TEXT,
-  cached_at INTEGER
-);
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS test_questions (
+      id TEXT PRIMARY KEY NOT NULL,
+      test_id TEXT,
+      question_text TEXT,
+      option_a TEXT,
+      option_b TEXT,
+      option_c TEXT,
+      option_d TEXT,
+      correct_answer TEXT,
+      cached_at INTEGER
+    );
+  `);
 
-    CREATE INDEX IF NOT EXISTS idx_ebook_nodes_series_parent
-    ON ebook_nodes(series_id, parent_id);
-
-     CREATE TABLE IF NOT EXISTS sync_meta (
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS sync_meta (
       module TEXT NOT NULL,
       goal_class_id TEXT NOT NULL DEFAULT '',
       version INTEGER DEFAULT 0,
       last_sync_time INTEGER DEFAULT 0,
       PRIMARY KEY (module, goal_class_id)
     );
+  `);
 
+  safeExec(`
     CREATE TABLE IF NOT EXISTS tool_subjects (
       id TEXT PRIMARY KEY NOT NULL,
       goal_class_id TEXT,
@@ -116,7 +197,9 @@ CREATE TABLE IF NOT EXISTS test_questions (
       sort_order INTEGER,
       is_active INTEGER DEFAULT 1
     );
+  `);
 
+  safeExec(`
     CREATE TABLE IF NOT EXISTS tool_chapters (
       id TEXT PRIMARY KEY NOT NULL,
       subject_id TEXT,
@@ -124,7 +207,9 @@ CREATE TABLE IF NOT EXISTS test_questions (
       sort_order INTEGER,
       is_active INTEGER DEFAULT 1
     );
+  `);
 
+  safeExec(`
     CREATE TABLE IF NOT EXISTS tool_topics (
       id TEXT PRIMARY KEY NOT NULL,
       chapter_id TEXT,
@@ -135,16 +220,9 @@ CREATE TABLE IF NOT EXISTS test_questions (
       notes TEXT DEFAULT '',
       is_active INTEGER DEFAULT 1
     );
-       CREATE TABLE IF NOT EXISTS app_meta (
-      key TEXT PRIMARY KEY NOT NULL,
-      value TEXT
-    );
+  `);
 
-    CREATE TABLE IF NOT EXISTS app_meta (
-      key TEXT PRIMARY KEY NOT NULL,
-      value TEXT
-    );
-
+  safeExec(`
     CREATE TABLE IF NOT EXISTS mentorships (
       id TEXT PRIMARY KEY NOT NULL,
       title TEXT,
@@ -162,45 +240,65 @@ CREATE TABLE IF NOT EXISTS test_questions (
       is_free INTEGER DEFAULT 0,
       has_access INTEGER DEFAULT 0
     );
+  `);
 
+  safeExec(`
     CREATE TABLE IF NOT EXISTS mentorship_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       mentorship_id TEXT NOT NULL,
       content_id TEXT NOT NULL,
       content_type TEXT NOT NULL
     );
+  `);
 
+  safeExec(`
     CREATE TABLE IF NOT EXISTS chat_messages (
-    id TEXT PRIMARY KEY NOT NULL,
-    goal_class_id TEXT NOT NULL,
-    user_id TEXT,
-    user_name TEXT,
-    user_avatar TEXT,
-    body TEXT,
-    type TEXT DEFAULT 'text',
-    created_at TEXT,
-    cached_at INTEGER
-  );
-  CREATE TABLE IF NOT EXISTS mentorship_booking_plans (
-  id TEXT PRIMARY KEY NOT NULL,
-  title TEXT,
-  description TEXT,
-  duration_minutes INTEGER DEFAULT 0,
-  price_paise INTEGER DEFAULT 0,
-  cached_at INTEGER
-  );
+      id TEXT PRIMARY KEY NOT NULL,
+      goal_class_id TEXT NOT NULL,
+      user_id TEXT,
+      user_name TEXT,
+      user_avatar TEXT,
+      body TEXT,
+      type TEXT DEFAULT 'text',
+      created_at TEXT,
+      cached_at INTEGER
+    );
+  `);
 
-  CREATE INDEX IF NOT EXISTS idx_chat_messages_goal_created
-  ON chat_messages(goal_class_id, created_at);
-    
+  safeExec(`
+    CREATE TABLE IF NOT EXISTS mentorship_booking_plans (
+      id TEXT PRIMARY KEY NOT NULL,
+      title TEXT,
+      description TEXT,
+      duration_minutes INTEGER DEFAULT 0,
+      price_paise INTEGER DEFAULT 0,
+      cached_at INTEGER
+    );
+  `);
 
+  safeExec(`
+    CREATE INDEX IF NOT EXISTS idx_ebook_nodes_series_parent
+    ON ebook_nodes(series_id, parent_id);
+  `);
+
+  safeExec(`
+    CREATE INDEX IF NOT EXISTS idx_chat_messages_goal_created
+    ON chat_messages(goal_class_id, created_at);
+  `);
+
+  safeExec(`
     CREATE INDEX IF NOT EXISTS idx_tool_subjects_goal
     ON tool_subjects(goal_class_id);
+  `);
 
+  safeExec(`
     CREATE INDEX IF NOT EXISTS idx_tool_chapters_subject
     ON tool_chapters(subject_id);
+  `);
 
+  safeExec(`
     CREATE INDEX IF NOT EXISTS idx_tool_topics_chapter
     ON tool_topics(chapter_id);
   `);
+  initStudySessionTable();
 }

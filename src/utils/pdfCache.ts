@@ -171,3 +171,6 @@ export async function cleanupOldCachedPdfs() {
     }
   }
 }
+export async function clearPdfCacheOnAppUpdate() {
+  await clearAllCachedPdfs();
+}

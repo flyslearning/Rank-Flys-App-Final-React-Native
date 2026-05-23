@@ -11,11 +11,19 @@ import {
   Platform,
   Animated,
   Modal,
+  ScrollView,
+  Easing,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
+
 import { useAuthStore } from "../../store/auth.store";
+import {
+  saveStudySession,
+  getTodayStudySeconds,
+} from "../../db/studySessionDb";
 import {
   startStudyNotification,
   stopStudyNotification,
@@ -35,6 +43,7 @@ const RED = "#EF4444";
 const ORANGE = "#F59E0B";
 const SOFT_BLUE = "#EFF6FF";
 const SOFT_GREEN = "#F0FDF4";
+const SOFT_ORANGE = "#FFF7ED";
 
 const STUDY_ACTIVE_KEY = "study_room_active";
 const STUDY_STARTED_AT_KEY = "study_room_started_at";
@@ -67,7 +76,11 @@ async function readJson(res: Response) {
 }
 
 function isUnauthorized(text: string) {
-  return text.includes("401") || text.includes("Unauthorized") || text.includes("unauthorized");
+  return (
+    text.includes("401") ||
+    text.includes("Unauthorized") ||
+    text.includes("unauthorized")
+  );
 }
 
 function formatStudyTime(sec: number) {
@@ -92,8 +105,129 @@ function formatDuration(startedAt?: number) {
   return `${h}h ${m}m`;
 }
 
+function getUsersFromSocketPayload(data: any): StudyUser[] {
+  if (Array.isArray(data?.study?.users)) return data.study.users;
+  if (Array.isArray(data?.users)) return data.users;
+  if (Array.isArray(data?.active_students)) return data.active_students;
+  if (Array.isArray(data?.students)) return data.students;
+  return [];
+}
+
+function AnimatedStudentCard({
+  item,
+  myUserID,
+}: {
+  item: StudyUser;
+  myUserID: string;
+}) {
+  const scale = useRef(new Animated.Value(0.94)).current;
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(12)).current;
+  const ring = useRef(new Animated.Value(0)).current;
+
+  const isMe = String(item.user_id) === myUserID;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scale, {
+        toValue: 1,
+        friction: 7,
+        tension: 70,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 260,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ring, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(ring, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    loop.start();
+
+    return () => loop.stop();
+  }, [opacity, ring, scale, translateY]);
+
+  const ringScale = ring.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.9],
+  });
+
+  const ringOpacity = ring.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.4, 0],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.userCard,
+        {
+          opacity,
+          transform: [{ translateY }, { scale }],
+        },
+      ]}
+    >
+      <View style={styles.avatarWrap}>
+        <Animated.View
+          style={[
+            styles.avatarRing,
+            {
+              opacity: ringOpacity,
+              transform: [{ scale: ringScale }],
+            },
+          ]}
+        />
+
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {String(item.user_name || "S").charAt(0).toUpperCase()}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.userInfo}>
+        <Text style={styles.userName} numberOfLines={1}>
+          {item.user_name || "Student"} {isMe ? "(You)" : ""}
+        </Text>
+
+        <Text style={styles.userTime}>
+          Focused for {formatDuration(item.started_at)}
+        </Text>
+      </View>
+
+      <View style={styles.liveBadge}>
+        <View style={styles.liveBadgeDot} />
+        <Text style={styles.liveBadgeText}>LIVE</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
 export default function StudyRoomScreen() {
   const insets = useSafeAreaInsets();
+  const navigation: any = useNavigation();
+
   const auth: any = useAuthStore();
   const user: any = auth?.user;
 
@@ -133,7 +267,9 @@ export default function StudyRoomScreen() {
   const [status, setStatus] = useState<Status>("connecting");
   const [loading, setLoading] = useState(true);
   const [isStudying, setIsStudying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [studySeconds, setStudySeconds] = useState(0);
+  const [todaySeconds, setTodaySeconds] = useState(0);
   const [studyCount, setStudyCount] = useState(0);
   const [studyUsers, setStudyUsers] = useState<StudyUser[]>([]);
   const [showAllStudents, setShowAllStudents] = useState(false);
@@ -142,27 +278,91 @@ export default function StudyRoomScreen() {
   const mounted = useRef(true);
   const manualClose = useRef(false);
   const reconnectTimer = useRef<any>(null);
+  const refreshStudentsTimer = useRef<any>(null);
   const reconnectAttempt = useRef(0);
   const socketOpening = useRef(false);
+
   const studyTimerRef = useRef<any>(null);
   const isStudyingRef = useRef(false);
+  const isPausedRef = useRef(false);
+
+  const sessionStartedAtRef = useRef<number | null>(null);
+  const activeDurationRef = useRef(0);
+  const lastResumeAtRef = useRef<number | null>(null);
 
   const pulse = useRef(new Animated.Value(1)).current;
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(18)).current;
 
+  const modalScale = useRef(new Animated.Value(0.96)).current;
+  const modalOpacity = useRef(new Animated.Value(0)).current;
+  const closeSpin = useRef(new Animated.Value(0)).current;
+
   const previewUsers = useMemo(() => studyUsers.slice(0, 4), [studyUsers]);
 
   const getCurrentToken = useCallback(() => {
     const state: any = useAuthStore.getState();
-    return state.accessToken || token;
-  }, [token]);
+    return state.accessToken || state.access_token || state.token || "";
+  }, []);
 
   const refreshTokenOnlyWhenNeeded = useCallback(async () => {
     const state: any = useAuthStore.getState();
-    const fresh = await state.refreshAccessToken?.();
-    return fresh || null;
+
+    if (typeof state.refreshAccessToken === "function") {
+      const fresh = await state.refreshAccessToken();
+      if (fresh) return fresh;
+    }
+
+    return null;
   }, []);
+
+  const getCurrentActiveSeconds = useCallback(() => {
+    if (!isStudyingRef.current) return 0;
+
+    let total = activeDurationRef.current;
+
+    if (!isPausedRef.current && lastResumeAtRef.current) {
+      total += Math.floor((Date.now() - lastResumeAtRef.current) / 1000);
+    }
+
+    return Math.max(0, total);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (studyTimerRef.current) {
+      clearInterval(studyTimerRef.current);
+      studyTimerRef.current = null;
+    }
+  }, []);
+
+  const startActiveTimer = useCallback(() => {
+    stopTimer();
+
+    const update = () => {
+      setStudySeconds(getCurrentActiveSeconds());
+    };
+
+    update();
+    studyTimerRef.current = setInterval(update, 1000);
+  }, [getCurrentActiveSeconds, stopTimer]);
+
+  const sendWs = useCallback((payload: any) => {
+    const ws = wsRef.current;
+
+    if (ws?.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(payload));
+      return true;
+    }
+
+    return false;
+  }, []);
+
+  const requestActiveStudents = useCallback(() => {
+    sendWs({ event: "study_count" });
+    sendWs({ event: "get_study_count" });
+    sendWs({ event: "active_students" });
+    sendWs({ event: "get_active_students" });
+  }, [sendWs]);
 
   useEffect(() => {
     Animated.parallel([
@@ -180,7 +380,7 @@ export default function StudyRoomScreen() {
   }, [fade, slide]);
 
   useEffect(() => {
-    if (!isStudying) {
+    if (!isStudying || isPaused) {
       pulse.setValue(1);
       return;
     }
@@ -201,9 +401,36 @@ export default function StudyRoomScreen() {
     );
 
     anim.start();
-
     return () => anim.stop();
-  }, [isStudying, pulse]);
+  }, [isStudying, isPaused, pulse]);
+
+  useEffect(() => {
+    if (showAllStudents) {
+      closeSpin.setValue(0);
+      modalScale.setValue(0.96);
+      modalOpacity.setValue(0);
+
+      Animated.parallel([
+        Animated.spring(modalScale, {
+          toValue: 1,
+          friction: 7,
+          tension: 70,
+          useNativeDriver: true,
+        }),
+        Animated.timing(modalOpacity, {
+          toValue: 1,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+        Animated.timing(closeSpin, {
+          toValue: 1,
+          duration: 380,
+          easing: Easing.out(Easing.back(1.4)),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [showAllStudents, modalScale, modalOpacity, closeSpin]);
 
   const joinChat = useCallback(async () => {
     let currentToken = getCurrentToken();
@@ -247,39 +474,6 @@ export default function StudyRoomScreen() {
     }
   }, [goalClassID, getCurrentToken, refreshTokenOnlyWhenNeeded]);
 
-  const sendWs = useCallback((payload: any) => {
-    const ws = wsRef.current;
-
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(payload));
-      return true;
-    }
-
-    return false;
-  }, []);
-
-  const stopTimer = useCallback(() => {
-    if (studyTimerRef.current) {
-      clearInterval(studyTimerRef.current);
-      studyTimerRef.current = null;
-    }
-  }, []);
-
-  const startTimerFrom = useCallback(
-    (startTime: number) => {
-      stopTimer();
-
-      const update = () => {
-        const sec = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
-        setStudySeconds(sec);
-      };
-
-      update();
-      studyTimerRef.current = setInterval(update, 1000);
-    },
-    [stopTimer]
-  );
-
   const closeSocket = useCallback(
     (manual = true, nextStatus: Status = "offline") => {
       manualClose.current = manual;
@@ -287,6 +481,11 @@ export default function StudyRoomScreen() {
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);
         reconnectTimer.current = null;
+      }
+
+      if (refreshStudentsTimer.current) {
+        clearInterval(refreshStudentsTimer.current);
+        refreshStudentsTimer.current = null;
       }
 
       const ws = wsRef.current;
@@ -324,6 +523,7 @@ export default function StudyRoomScreen() {
       if (current?.readyState === WebSocket.OPEN) {
         setStatus("connected");
         setLoading(false);
+        requestActiveStudents();
         return;
       }
 
@@ -352,7 +552,23 @@ export default function StudyRoomScreen() {
         setStatus("connected");
         setLoading(false);
 
-        if (isStudyingRef.current) {
+        requestActiveStudents();
+
+        setTimeout(() => {
+          if (mounted.current) requestActiveStudents();
+        }, 500);
+
+        if (refreshStudentsTimer.current) {
+          clearInterval(refreshStudentsTimer.current);
+        }
+
+        refreshStudentsTimer.current = setInterval(() => {
+          if (mounted.current && wsRef.current?.readyState === WebSocket.OPEN) {
+            requestActiveStudents();
+          }
+        }, 15000);
+
+        if (isStudyingRef.current && !isPausedRef.current) {
           sendWs({
             event: "study_start",
             dp: userDp,
@@ -367,20 +583,19 @@ export default function StudyRoomScreen() {
           const data = JSON.parse(event.data);
           const eventName = data?.event;
 
-          if (eventName === "study_count_update") {
-            const users = Array.isArray(data?.study?.users) ? data.study.users : [];
+          const allowedEvents = [
+            "study_count_update",
+            "study_count",
+            "active_students",
+            "get_active_students",
+            "students_update",
+          ];
 
-            setStudyCount(Number(data?.study?.count || 0));
+          const users = getUsersFromSocketPayload(data);
+
+          if (allowedEvents.includes(eventName) || users.length > 0) {
+            setStudyCount(Number(data?.study?.count || data?.count || users.length || 0));
             setStudyUsers(users);
-
-            const me = users.find(
-              (u: StudyUser) => String(u.user_id) === myUserID
-            );
-
-            if (me?.started_at && isStudyingRef.current) {
-              const serverStart = Number(me.started_at) * 1000;
-              startTimerFrom(serverStart);
-            }
           }
         } catch {}
       };
@@ -397,6 +612,11 @@ export default function StudyRoomScreen() {
         wsRef.current = null;
         socketOpening.current = false;
         setLoading(false);
+
+        if (refreshStudentsTimer.current) {
+          clearInterval(refreshStudentsTimer.current);
+          refreshStudentsTimer.current = null;
+        }
 
         if (manualClose.current) return;
 
@@ -437,10 +657,9 @@ export default function StudyRoomScreen() {
     [
       goalClassID,
       getCurrentToken,
-      myUserID,
       refreshTokenOnlyWhenNeeded,
+      requestActiveStudents,
       sendWs,
-      startTimerFrom,
       userDp,
     ]
   );
@@ -453,13 +672,24 @@ export default function StudyRoomScreen() {
       const startTime = Number(savedStartedAt);
 
       if (startTime > 0) {
+        const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+
+        sessionStartedAtRef.current = startTime;
+        activeDurationRef.current = elapsed;
+        lastResumeAtRef.current = Date.now();
+
         isStudyingRef.current = true;
+        isPausedRef.current = false;
+
         setIsStudying(true);
-        startTimerFrom(startTime);
+        setIsPaused(false);
+        setStudySeconds(elapsed);
+
+        startActiveTimer();
         await startStudyNotification(myName, startTime);
       }
     }
-  }, [myName, startTimerFrom]);
+  }, [myName, startActiveTimer]);
 
   const openStudyRoom = useCallback(async () => {
     if (!token || !goalClassID) {
@@ -477,18 +707,26 @@ export default function StudyRoomScreen() {
 
       if (!mounted.current) return;
 
-      await connectSocket();
+      const freshToken = await refreshTokenOnlyWhenNeeded();
+      await connectSocket(freshToken || undefined);
     } catch (error) {
       console.log("OPEN_STUDY_ROOM_ERROR:", error);
       setStatus("offline");
       setLoading(false);
     }
-  }, [token, goalClassID, restoreLocalStudy, joinChat, connectSocket]);
+  }, [
+    token,
+    goalClassID,
+    restoreLocalStudy,
+    joinChat,
+    connectSocket,
+    refreshTokenOnlyWhenNeeded,
+  ]);
 
   const startStudy = useCallback(async () => {
     if (status !== "connected") return;
 
-    const startTime = Date.now();
+    const now = Date.now();
 
     const ok = sendWs({
       event: "study_start",
@@ -497,40 +735,132 @@ export default function StudyRoomScreen() {
 
     if (!ok) return;
 
+    sessionStartedAtRef.current = now;
+    activeDurationRef.current = 0;
+    lastResumeAtRef.current = now;
+
     isStudyingRef.current = true;
+    isPausedRef.current = false;
+
     setIsStudying(true);
+    setIsPaused(false);
+    setStudySeconds(0);
 
     await AsyncStorage.setItem(STUDY_ACTIVE_KEY, "true");
-    await AsyncStorage.setItem(STUDY_STARTED_AT_KEY, String(startTime));
+    await AsyncStorage.setItem(STUDY_STARTED_AT_KEY, String(now));
 
-    startTimerFrom(startTime);
-    await startStudyNotification(myName, startTime);
-  }, [status, sendWs, userDp, myName, startTimerFrom]);
+    startActiveTimer();
+    requestActiveStudents();
+    await startStudyNotification(myName, now);
+  }, [status, sendWs, userDp, myName, startActiveTimer, requestActiveStudents]);
+
+  const pauseStudy = useCallback(() => {
+    if (!isStudyingRef.current || isPausedRef.current) return;
+
+    if (lastResumeAtRef.current) {
+      activeDurationRef.current += Math.floor(
+        (Date.now() - lastResumeAtRef.current) / 1000
+      );
+    }
+
+    lastResumeAtRef.current = null;
+    isPausedRef.current = true;
+
+    setIsPaused(true);
+    setStudySeconds(activeDurationRef.current);
+
+    stopTimer();
+    sendWs({ event: "study_pause" });
+    requestActiveStudents();
+  }, [sendWs, stopTimer, requestActiveStudents]);
+
+  const resumeStudy = useCallback(() => {
+    if (!isStudyingRef.current || !isPausedRef.current) return;
+
+    lastResumeAtRef.current = Date.now();
+    isPausedRef.current = false;
+
+    setIsPaused(false);
+    startActiveTimer();
+
+    sendWs({
+      event: "study_start",
+      dp: userDp,
+    });
+
+    requestActiveStudents();
+  }, [sendWs, userDp, startActiveTimer, requestActiveStudents]);
 
   const stopStudy = useCallback(async () => {
     sendWs({ event: "study_stop" });
 
+    const now = Date.now();
+    const finalSeconds = getCurrentActiveSeconds();
+
+    if (sessionStartedAtRef.current && finalSeconds > 0) {
+      const date = new Date(sessionStartedAtRef.current).toISOString().slice(0, 10);
+
+      await saveStudySession({
+        date,
+        start_time: sessionStartedAtRef.current,
+        end_time: now,
+        duration_seconds: finalSeconds,
+      });
+
+      setTodaySeconds(getTodayStudySeconds());
+    }
+
+    sessionStartedAtRef.current = null;
+    lastResumeAtRef.current = null;
+    activeDurationRef.current = 0;
+
     isStudyingRef.current = false;
+    isPausedRef.current = false;
+
     setIsStudying(false);
+    setIsPaused(false);
     setStudySeconds(0);
 
     await AsyncStorage.removeItem(STUDY_ACTIVE_KEY);
     await AsyncStorage.removeItem(STUDY_STARTED_AT_KEY);
 
     stopTimer();
+    requestActiveStudents();
     await stopStudyNotification();
-  }, [sendWs, stopTimer]);
+  }, [sendWs, stopTimer, getCurrentActiveSeconds, requestActiveStudents]);
 
   useEffect(() => {
     mounted.current = true;
-    openStudyRoom();
 
-    const sub = AppState.addEventListener("change", (state) => {
+    openStudyRoom();
+    setTodaySeconds(getTodayStudySeconds());
+
+    const sub = AppState.addEventListener("change", async (state) => {
       if (state === "active") {
         manualClose.current = false;
-        connectSocket();
+
+        setTodaySeconds(getTodayStudySeconds());
+
+        if (isStudyingRef.current && !isPausedRef.current) {
+          startActiveTimer();
+        }
+
+        setTimeout(async () => {
+          if (!mounted.current) return;
+
+          const freshToken = await refreshTokenOnlyWhenNeeded();
+          await connectSocket(freshToken || undefined);
+
+          setTimeout(() => {
+            if (mounted.current) requestActiveStudents();
+          }, 700);
+        }, 500);
       } else {
         closeSocket(true);
+
+        if (isStudyingRef.current && !isPausedRef.current) {
+          stopTimer();
+        }
       }
     });
 
@@ -540,7 +870,27 @@ export default function StudyRoomScreen() {
       stopTimer();
       closeSocket(true);
     };
-  }, [openStudyRoom, connectSocket, closeSocket, stopTimer]);
+  }, []);
+
+  const closeModalAnimated = useCallback(() => {
+    Animated.parallel([
+      Animated.timing(modalOpacity, {
+        toValue: 0,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+      Animated.timing(modalScale, {
+        toValue: 0.96,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setShowAllStudents(false));
+  }, [modalOpacity, modalScale]);
+
+  const spin = closeSpin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["-180deg", "0deg"],
+  });
 
   const statusMeta = {
     connected: { text: "Connected", color: GREEN },
@@ -548,33 +898,6 @@ export default function StudyRoomScreen() {
     reconnecting: { text: "Reconnecting...", color: ORANGE },
     offline: { text: "Offline", color: RED },
   }[status];
-
-  const renderStudent = ({ item }: { item: StudyUser }) => {
-    const isMe = String(item.user_id) === myUserID;
-
-    return (
-      <View style={styles.userCard}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {String(item.user_name || "S").charAt(0).toUpperCase()}
-          </Text>
-        </View>
-
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>
-            {item.user_name || "Student"} {isMe ? "(You)" : ""}
-          </Text>
-          <Text style={styles.userTime}>
-            Focused for {formatDuration(item.started_at)}
-          </Text>
-        </View>
-
-        <View style={styles.liveBadge}>
-          <Text style={styles.liveBadgeText}>LIVE</Text>
-        </View>
-      </View>
-    );
-  };
 
   if (!token || !goalClassID) {
     return (
@@ -604,9 +927,32 @@ export default function StudyRoomScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.refresh} onPress={() => connectSocket()}>
-          <Ionicons name="refresh" size={20} color={BLUE} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => navigation.navigate("StudyStats")}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="stats-chart" size={20} color={BLUE} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={async () => {
+              closeSocket(false, "reconnecting");
+
+              const freshToken = await refreshTokenOnlyWhenNeeded();
+              await connectSocket(freshToken || undefined);
+
+              setTimeout(() => {
+                if (mounted.current) requestActiveStudents();
+              }, 700);
+            }}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="refresh" size={20} color={BLUE} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {loading ? (
@@ -624,146 +970,233 @@ export default function StudyRoomScreen() {
             },
           ]}
         >
-          <Animated.View style={[styles.heroCard, { transform: [{ scale: pulse }] }]}>
-            <View style={styles.heroTop}>
-              <View>
-                <Text style={styles.heroLabel}>FOCUS SESSION</Text>
-                <Text style={styles.heroName}>{myName}</Text>
-              </View>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Animated.View style={[styles.heroCard, { transform: [{ scale: pulse }] }]}>
+              <View style={styles.heroTop}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.heroLabel}>FOCUS SESSION</Text>
+                  <Text style={styles.heroName} numberOfLines={1}>
+                    {myName}
+                  </Text>
+                </View>
 
-              <View style={[styles.livePill, isStudying ? styles.liveOn : styles.liveOff]}>
                 <View
                   style={[
-                    styles.liveDot,
-                    isStudying ? styles.liveDotOn : styles.liveDotOff,
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.livePillText,
-                    isStudying ? styles.liveTextOn : styles.liveTextOff,
+                    styles.livePill,
+                    isStudying && !isPaused ? styles.liveOn : styles.liveOff,
                   ]}
                 >
-                  {isStudying ? "LIVE" : "READY"}
+                  <View
+                    style={[
+                      styles.liveDot,
+                      isStudying && !isPaused
+                        ? styles.liveDotOn
+                        : styles.liveDotOff,
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.livePillText,
+                      isStudying && !isPaused
+                        ? styles.liveTextOn
+                        : styles.liveTextOff,
+                    ]}
+                  >
+                    {isStudying ? (isPaused ? "PAUSED" : "LIVE") : "READY"}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={styles.timer}>{formatStudyTime(studySeconds)}</Text>
+
+              <Text style={styles.studyStatus}>
+                {isStudying
+                  ? isPaused
+                    ? "Timer paused. Resume when ready."
+                    : "Deep focus mode is active"
+                  : "Start your focused study session"}
+              </Text>
+
+              <TouchableOpacity
+                style={[
+                  styles.mainButton,
+                  isStudying ? styles.stopButton : styles.startButton,
+                  status !== "connected" && !isStudying && styles.disabledButton,
+                ]}
+                onPress={isStudying ? stopStudy : startStudy}
+                disabled={status !== "connected" && !isStudying}
+                activeOpacity={0.9}
+              >
+                <Ionicons
+                  name={isStudying ? "stop-circle" : "play-circle"}
+                  size={23}
+                  color="#FFFFFF"
+                />
+
+                <Text style={styles.mainButtonText}>
+                  {isStudying ? "Stop Study" : "Start Study"}
+                </Text>
+              </TouchableOpacity>
+
+              {isStudying && (
+                <TouchableOpacity
+                  style={[
+                    styles.mainButton,
+                    styles.secondaryMainButton,
+                    { backgroundColor: isPaused ? GREEN : ORANGE },
+                  ]}
+                  onPress={isPaused ? resumeStudy : pauseStudy}
+                  activeOpacity={0.9}
+                >
+                  <Ionicons
+                    name={isPaused ? "play-circle" : "pause-circle"}
+                    size={23}
+                    color="#FFFFFF"
+                  />
+
+                  <Text style={styles.mainButtonText}>
+                    {isPaused ? "Resume Study" : "Pause Study"}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </Animated.View>
+
+            <View style={styles.statsGrid}>
+              <View style={styles.statCard}>
+                <View style={styles.statIconGreen}>
+                  <Ionicons name="people-outline" size={22} color={GREEN} />
+                </View>
+                <Text style={styles.statNumber}>{studyCount}</Text>
+                <Text style={styles.statLabel}>Studying now</Text>
+              </View>
+
+              <View style={styles.statCard}>
+                <View style={styles.statIconBlue}>
+                  <Ionicons name="time-outline" size={22} color={BLUE} />
+                </View>
+                <Text style={styles.statNumberSmall}>
+                  {formatStudyTime(studySeconds)}
+                </Text>
+                <Text style={styles.statLabel}>Current session</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.todayCard}
+              onPress={() => navigation.navigate("StudyStats")}
+              activeOpacity={0.9}
+            >
+              <View style={styles.todayLeft}>
+                <View style={styles.statIconOrange}>
+                  <Ionicons name="stats-chart-outline" size={23} color={ORANGE} />
+                </View>
+
+                <View>
+                  <Text style={styles.todayLabel}>Today total</Text>
+                  <Text style={styles.todayTime}>{formatStudyTime(todaySeconds)}</Text>
+                </View>
+              </View>
+
+              <View style={styles.todayRight}>
+                <Text style={styles.todayView}>View stats</Text>
+                <Ionicons name="chevron-forward" size={18} color={BLUE} />
+              </View>
+            </TouchableOpacity>
+
+            <View style={styles.listHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Active Students</Text>
+                <Text style={styles.sectionSub}>
+                  {status === "connected"
+                    ? "Live students currently focused"
+                    : "Waiting for live connection"}
                 </Text>
               </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.viewAllButton,
+                  studyUsers.length === 0 && styles.viewAllDisabled,
+                ]}
+                onPress={() => setShowAllStudents(true)}
+                disabled={studyUsers.length === 0}
+              >
+                <Text style={styles.viewAllText}>View All</Text>
+                <Ionicons name="chevron-forward" size={15} color={BLUE} />
+              </TouchableOpacity>
             </View>
 
-            <Text style={styles.timer}>{formatStudyTime(studySeconds)}</Text>
-
-            <Text style={styles.studyStatus}>
-              {isStudying
-                ? "Background focus mode is active"
-                : "Start your focused study session"}
-            </Text>
-
-            <TouchableOpacity
-              style={[
-                styles.mainButton,
-                isStudying ? styles.stopButton : styles.startButton,
-                status !== "connected" && !isStudying && styles.disabledButton,
-              ]}
-              onPress={isStudying ? stopStudy : startStudy}
-              disabled={status !== "connected" && !isStudying}
-            >
-              <Ionicons
-                name={isStudying ? "stop-circle" : "play-circle"}
-                size={23}
-                color="#FFFFFF"
-              />
-
-              <Text style={styles.mainButtonText}>
-                {isStudying ? "Stop Study" : "Start Study"}
-              </Text>
-            </TouchableOpacity>
-          </Animated.View>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <View style={styles.statIconGreen}>
-                <Ionicons name="people-outline" size={22} color={GREEN} />
-              </View>
-              <Text style={styles.statNumber}>{studyCount}</Text>
-              <Text style={styles.statLabel}>Studying now</Text>
-            </View>
-
-            <View style={styles.statCard}>
-              <View style={styles.statIconBlue}>
-                <Ionicons name="time-outline" size={22} color={BLUE} />
-              </View>
-              <Text style={styles.statNumberSmall}>
-                {formatStudyTime(studySeconds)}
-              </Text>
-              <Text style={styles.statLabel}>Your time</Text>
-            </View>
-          </View>
-
-          <View style={styles.listHeader}>
-            <View>
-              <Text style={styles.sectionTitle}>Active Students</Text>
-              <Text style={styles.sectionSub}>Students currently focused</Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.viewAllButton}
-              onPress={() => setShowAllStudents(true)}
-              disabled={studyUsers.length === 0}
-            >
-              <Text style={styles.viewAllText}>View All</Text>
-              <Ionicons name="chevron-forward" size={15} color={BLUE} />
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={previewUsers}
-            keyExtractor={(item) => String(item.user_id)}
-            contentContainerStyle={styles.list}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyBox}>
-                <Ionicons name="moon-outline" size={52} color={MUTED} />
-                <Text style={styles.emptyTitle}>No one studying yet</Text>
-                <Text style={styles.emptyText}>Start karo aur first student bano.</Text>
-              </View>
-            }
-            renderItem={renderStudent}
-          />
+            <FlatList
+              data={previewUsers}
+              keyExtractor={(item) => String(item.user_id)}
+              scrollEnabled={false}
+              contentContainerStyle={styles.list}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <View style={styles.emptyBox}>
+                  <Ionicons name="people-circle-outline" size={58} color={MUTED} />
+                  <Text style={styles.emptyTitle}>No active students yet</Text>
+                  <Text style={styles.emptyText}>
+                    Connected hote hi active students yaha show honge.
+                  </Text>
+                </View>
+              }
+              renderItem={({ item }) => (
+                <AnimatedStudentCard item={item} myUserID={myUserID} />
+              )}
+            />
+          </ScrollView>
         </Animated.View>
       )}
 
       <Modal
         visible={showAllStudents}
-        animationType="slide"
+        animationType="none"
         transparent
-        onRequestClose={() => setShowAllStudents(false)}
+        onRequestClose={closeModalAnimated}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <Animated.View style={[styles.modalOverlay, { opacity: modalOpacity }]}>
+          <Animated.View
+            style={[
+              styles.modalCard,
+              {
+                paddingBottom: Math.max(insets.bottom, 16),
+                transform: [{ scale: modalScale }],
+              },
+            ]}
+          >
             <View style={styles.modalHandle} />
 
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalTitle}>All Active Students</Text>
-                <Text style={styles.modalSub}>{studyUsers.length} students studying now</Text>
+                <Text style={styles.modalSub}>
+                  {studyUsers.length} students studying now
+                </Text>
               </View>
 
               <TouchableOpacity
                 style={styles.modalClose}
-                onPress={() => setShowAllStudents(false)}
+                onPress={closeModalAnimated}
+                activeOpacity={0.85}
               >
-                <Ionicons name="close" size={22} color={TEXT} />
+                <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                  <Ionicons name="close" size={22} color={TEXT} />
+                </Animated.View>
               </TouchableOpacity>
             </View>
 
             <FlatList
               data={studyUsers}
               keyExtractor={(item) => String(item.user_id)}
-              renderItem={renderStudent}
+              renderItem={({ item }) => (
+                <AnimatedStudentCard item={item} myUserID={myUserID} />
+              )}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.modalList}
             />
-          </View>
-        </View>
+          </Animated.View>
+        </Animated.View>
       </Modal>
     </View>
   );
@@ -771,6 +1204,7 @@ export default function StudyRoomScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: BG },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -792,11 +1226,12 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   headerText: { flex: 1 },
-  title: { fontSize: 22, fontWeight: "900", color: TEXT },
+  title: { fontSize: 21, fontWeight: "900", color: TEXT },
   statusRow: { flexDirection: "row", alignItems: "center", marginTop: 4 },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 7 },
   subtitle: { fontSize: 12, fontWeight: "800", color: MUTED },
-  refresh: {
+  headerActions: { flexDirection: "row", gap: 9 },
+  headerButton: {
     width: 42,
     height: 42,
     borderRadius: 16,
@@ -806,31 +1241,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DBEAFE",
   },
+
   body: { flex: 1, backgroundColor: PAGE, padding: 16 },
+
   heroCard: {
     backgroundColor: BG,
-    borderRadius: 30,
+    borderRadius: 32,
     padding: 22,
     borderWidth: 1,
     borderColor: "#E0EAFF",
     shadowColor: "#2563EB",
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
+    shadowOpacity: 0.12,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
   },
   heroTop: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    gap: 12,
   },
   heroLabel: {
     fontSize: 11,
     fontWeight: "900",
     color: BLUE,
-    letterSpacing: 1,
+    letterSpacing: 1.2,
   },
   heroName: { marginTop: 5, fontSize: 19, fontWeight: "900", color: TEXT },
+
   livePill: {
     flexDirection: "row",
     alignItems: "center",
@@ -847,6 +1286,7 @@ const styles = StyleSheet.create({
   livePillText: { fontSize: 11, fontWeight: "900" },
   liveTextOn: { color: GREEN },
   liveTextOff: { color: MUTED },
+
   timer: {
     marginTop: 22,
     fontSize: 52,
@@ -862,6 +1302,7 @@ const styles = StyleSheet.create({
     color: MUTED,
     textAlign: "center",
   },
+
   mainButton: {
     marginTop: 22,
     flexDirection: "row",
@@ -871,15 +1312,17 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderRadius: 20,
   },
+  secondaryMainButton: { marginTop: 12 },
   startButton: { backgroundColor: GREEN },
   stopButton: { backgroundColor: RED },
   disabledButton: { backgroundColor: "#9CA3AF" },
   mainButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
-  statsRow: { flexDirection: "row", gap: 12, marginTop: 14 },
+
+  statsGrid: { flexDirection: "row", gap: 12, marginTop: 14 },
   statCard: {
     flex: 1,
     backgroundColor: BG,
-    borderRadius: 22,
+    borderRadius: 23,
     padding: 15,
     borderWidth: 1,
     borderColor: BORDER,
@@ -907,9 +1350,40 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 10,
   },
+  statIconOrange: {
+    width: 46,
+    height: 46,
+    borderRadius: 17,
+    backgroundColor: SOFT_ORANGE,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   statNumber: { fontSize: 24, fontWeight: "900", color: TEXT },
   statNumberSmall: { fontSize: 17, fontWeight: "900", color: TEXT },
   statLabel: { marginTop: 3, fontSize: 12, fontWeight: "800", color: MUTED },
+
+  todayCard: {
+    marginTop: 14,
+    backgroundColor: BG,
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: BORDER,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    shadowColor: "#0F172A",
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  todayLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  todayLabel: { fontSize: 12, fontWeight: "800", color: MUTED },
+  todayTime: { marginTop: 3, fontSize: 20, fontWeight: "900", color: TEXT },
+  todayRight: { flexDirection: "row", alignItems: "center", gap: 3 },
+  todayView: { fontSize: 12, fontWeight: "900", color: BLUE },
+
   listHeader: {
     marginTop: 20,
     marginBottom: 10,
@@ -929,11 +1403,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#DBEAFE",
   },
+  viewAllDisabled: { opacity: 0.5 },
   viewAllText: { fontSize: 12, fontWeight: "900", color: BLUE, marginRight: 3 },
   list: { paddingBottom: Platform.OS === "ios" ? 30 : 16 },
+
   userCard: {
     backgroundColor: BG,
-    borderRadius: 20,
+    borderRadius: 22,
     padding: 13,
     borderWidth: 1,
     borderColor: BORDER,
@@ -941,10 +1417,24 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     shadowColor: "#0F172A",
-    shadowOpacity: 0.035,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 1,
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  avatarWrap: {
+    width: 48,
+    height: 48,
+    marginRight: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarRing: {
+    position: "absolute",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: GREEN,
   },
   avatar: {
     width: 44,
@@ -955,7 +1445,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#DBEAFE",
-    marginRight: 12,
   },
   avatarText: { color: BLUE, fontWeight: "900", fontSize: 16 },
   userInfo: { flex: 1 },
@@ -968,18 +1457,28 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: "#BBF7D0",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  liveBadgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: GREEN,
   },
   liveBadgeText: { color: GREEN, fontSize: 10, fontWeight: "900" },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.35)",
+    backgroundColor: "rgba(15, 23, 42, 0.38)",
     justifyContent: "flex-end",
   },
   modalCard: {
     maxHeight: "82%",
     backgroundColor: BG,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     paddingHorizontal: 16,
     paddingTop: 10,
   },
@@ -1000,9 +1499,9 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: "900", color: TEXT },
   modalSub: { marginTop: 4, fontSize: 12, fontWeight: "700", color: MUTED },
   modalClose: {
-    width: 40,
-    height: 40,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "#F8FAFC",
     alignItems: "center",
     justifyContent: "center",
@@ -1010,6 +1509,7 @@ const styles = StyleSheet.create({
     borderColor: BORDER,
   },
   modalList: { paddingBottom: 10 },
+
   center: {
     flex: 1,
     alignItems: "center",
