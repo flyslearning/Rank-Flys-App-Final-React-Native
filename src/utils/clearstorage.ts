@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { clearAllCachedPdfs } from "./pdfCache";
 
+
 // ❌ Important data — never clear automatically
 export const PROTECTED_KEYS = [
   "access_token",
@@ -30,7 +31,20 @@ export const clearTemporaryAppData = async () => {
   try {
     console.log("Clearing temporary app data...");
 
+    // preserve intro
+    const hasSeenIntro = await AsyncStorage.getItem(
+      "has_seen_intro"
+    );
+
     await AsyncStorage.multiRemove(TEMP_KEYS);
+
+    // restore intro just in case
+    if (hasSeenIntro) {
+      await AsyncStorage.setItem(
+        "has_seen_intro",
+        hasSeenIntro
+      );
+    }
 
     await clearAllCachedPdfs();
 
@@ -72,5 +86,66 @@ export const printAllStorageKeys = async () => {
     console.log(keys);
   } catch (error) {
     console.log("Print keys error:", error);
+  }
+};
+
+import { db } from "../db/database";
+
+export const clearFullLocalDatabase = async () => {
+  try {
+    const tables = db.getAllSync<{ name: string }>(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+      AND name NOT LIKE 'sqlite_%'
+    `);
+
+    db.withTransactionSync(() => {
+      tables.forEach((table) => {
+        if (table.name === "app_meta") return;
+
+        db.runSync(`DELETE FROM ${table.name}`);
+      });
+    });
+
+    console.log("Full local database data cleared");
+  } catch (error) {
+    console.log("Full DB clear error:", error);
+  }
+};
+
+export const clearDataOnGoalClassChange = async () => {
+  try {
+    await clearEverythingExceptProtected();
+    await clearFullLocalDatabase();
+
+    console.log("Goal/Class change data cleared");
+  } catch (error) {
+    console.log("Goal/Class clear error:", error);
+  }
+};
+
+export const clearDataOnLogout = async () => {
+  try {
+    const hasSeenIntro = await AsyncStorage.getItem(
+      "has_seen_intro"
+    );
+
+    await AsyncStorage.clear();
+
+    if (hasSeenIntro) {
+      await AsyncStorage.setItem(
+        "has_seen_intro",
+        hasSeenIntro
+      );
+    }
+
+    await clearAllCachedPdfs();
+
+    await clearFullLocalDatabase();
+
+    console.log("Logout clear complete");
+  } catch (error) {
+    console.log("Logout clear error:", error);
   }
 };

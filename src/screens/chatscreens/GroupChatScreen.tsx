@@ -867,7 +867,7 @@ const body = item.body || item.message || "";
                     color={isAdmin ? "#B91C1C" : "#FFFFFF"}
                   />
                 <Text style={[styles.roleBadgeText, isAdmin && styles.adminRoleBadgeText]}>
-                {roleLabel || "Verified"}
+                {isAdmin ? "FLYS Connect" : roleLabel || "Verified"}
               </Text>
               </Animated.View>
             )}

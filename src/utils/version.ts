@@ -1,6 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
-import { clearTemporaryAppData } from "./clearstorage";
+import {
+  clearEverythingExceptProtected,
+  clearFullLocalDatabase,
+} from "./clearstorage";
 
 export const isVersionLower = (current: string, minimum: string) => {
   const c = current.split(".").map(Number);
@@ -17,7 +20,7 @@ export const isVersionLower = (current: string, minimum: string) => {
   return false;
 };
 
-const APP_DATA_VERSION = '2';
+const APP_DATA_VERSION = '3';
 
 const CACHE_KEYS_TO_CLEAR = [
   'home_cache',
@@ -44,9 +47,11 @@ export const checkAndMigrateAppData = async () => {
       console.log('App/Data update detected');
 
       if (isDataChanged) {
-        await clearTemporaryAppData();
-        await AsyncStorage.setItem('APP_DATA_VERSION', APP_DATA_VERSION);
-      }
+      await clearEverythingExceptProtected();
+      await clearFullLocalDatabase();
+
+      await AsyncStorage.setItem("APP_DATA_VERSION", APP_DATA_VERSION);
+    }
 
       await AsyncStorage.setItem('APP_VERSION', appVersion);
     }

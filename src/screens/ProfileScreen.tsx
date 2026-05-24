@@ -21,6 +21,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { AuthAPI, setAuthToken } from "../api/auth.api";
 import { useAuthStore } from "../store/auth.store";
 import { MetaAPI } from "../api/meta.api";
+import { clearEverythingExceptProtected } from "../utils/clearstorage";
+import { clearDataOnGoalClassChange } from "../utils/clearstorage";
+import * as Updates from "expo-updates";
 
 const { width } = Dimensions.get("window");
 const isSmall = width < 380;
@@ -173,6 +176,11 @@ export default function ProfileScreen() {
 
     try {
       setSaving(true);
+      const oldGoalId = profile?.goal_id || "";
+      const oldClassId = profile?.class_id || "";
+
+      const isGoalClassChanged =
+      oldGoalId !== goalId || oldClassId !== classId;
 
       await AuthAPI.completeProfile({
         first_name: firstName.trim(),
@@ -206,6 +214,9 @@ export default function ProfileScreen() {
 
           setAuthToken(newAccessToken, newRefreshToken);
         }
+        if (isGoalClassChanged) {
+          await clearDataOnGoalClassChange();
+        }
       }
 
       const updatedProfile = {
@@ -224,7 +235,14 @@ export default function ProfileScreen() {
       Alert.alert("Success", "Profile updated successfully");
       setEditMode(false);
 
+      if (isGoalClassChanged) {
+        await Updates.reloadAsync();
+        return;
+      }
+
       await init();
+
+
     } catch (error: any) {
       console.log("Profile update error:", error?.response?.data || error.message);
       Alert.alert("Error", "Profile update failed");

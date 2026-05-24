@@ -3,7 +3,7 @@ import { initStudySessionTable } from "./studySessionDb";
 
 export const db = SQLite.openDatabaseSync("app.db");
 
-const DB_SCHEMA_VERSION = 2;
+const DB_SCHEMA_VERSION = 3;
 
 function safeExec(sql: string) {
   try {

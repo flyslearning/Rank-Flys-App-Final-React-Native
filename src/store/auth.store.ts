@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { storage } from "../utils/storage";
 import { clearAllCachedPdfs } from "../utils/pdfCache";
 import { AUTH_BASE_URL } from "../api/client";
+import { clearDataOnLogout } from "../utils/clearstorage";
 
 type AuthState = {
   accessToken: string | null;
@@ -102,11 +103,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
     logout: async () => {
-    await clearAllCachedPdfs();
-
-    await storage.remove("access_token");
-    await storage.remove("refresh_token");
-    await storage.remove("user");
+    await clearDataOnLogout();
 
     set({
       accessToken: null,
@@ -115,7 +112,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       isReady: true,
       isAuthenticated: false,
     });
-  },
+    },
 
   refreshAccessToken: async () => {
     const refreshToken = await storage.get<string>("refresh_token");
