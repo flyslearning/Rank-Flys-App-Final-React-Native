@@ -3,7 +3,9 @@ import { paymentClient } from "./client";
 export type ContentType =
   | "test_series"
   | "ebook_series"
-  | "mentorship_series";
+  | "mentorship_series"
+  | "book"
+  | "library_pass";
 
 export const PaymentAPI = {
   createOrder: async (payload: {
@@ -56,7 +58,7 @@ export const checkAccess = async (params: {
 export type PurchaseItem = {
   order_id: string;
   content_id: string;
-  content_type: "ebook_series" | "test_series" | "mentorship_series";
+  content_type: "ebook_series" | "test_series" | "mentorship_series" | "book" | "library_pass";
   title: string;
   description: string;
   image_url: string;

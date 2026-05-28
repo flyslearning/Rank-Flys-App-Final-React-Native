@@ -28,7 +28,7 @@
         "foregroundImage": "./src/assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "versionCode": 39
+      "versionCode": 40
     },
     "ios": {
       "bundleIdentifier": "com.RankFly.testseries",

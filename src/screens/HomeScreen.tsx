@@ -17,6 +17,7 @@ import QuickActionCard from "../components/home/QuickActionCard";
 import SectionTitle from "../components/home/SectionTitle";
 import Tools from "../components/home/Tools";
 import MentorshipPlansSlider from "../components/mentorshipslots/MentorshipPlansSlider";
+import BooksLibrarySlider from "../components/books/BooksLibrarySlider";
 
 export default function HomeScreen({ navigation }: any) {
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -121,9 +122,8 @@ useEffect(() => {
           </View>
         </Pressable>
 
-        <View style={styles.toolsSoftWrap}>
-          <Tools navigation={navigation} />
-        </View>
+        <BooksLibrarySlider navigation={navigation} />
+
          <MentorshipPlansSlider navigation={navigation} />
         <Pressable
           style={styles.studyMaterialCard}
@@ -229,6 +229,9 @@ useEffect(() => {
 
           <Ionicons name="chevron-forward" size={22} color="#2563EB" />
         </Pressable>
+                <View style={styles.toolsSoftWrap}>
+          <Tools navigation={navigation} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

@@ -3,7 +3,7 @@ import { initStudySessionTable } from "./studySessionDb";
 
 export const db = SQLite.openDatabaseSync("app.db");
 
-const DB_SCHEMA_VERSION = 3;
+const DB_SCHEMA_VERSION = 4;
 
 function safeExec(sql: string) {
   try {
@@ -46,6 +46,9 @@ function resetDatabaseTables() {
   safeExec(`DROP TABLE IF EXISTS mentorship_items;`);
   safeExec(`DROP TABLE IF EXISTS chat_messages;`);
   safeExec(`DROP TABLE IF EXISTS mentorship_booking_plans;`);
+  safeExec(`DROP TABLE IF EXISTS books;`);
+  safeExec(`DROP TABLE IF EXISTS book_pages;`);
+  safeExec(`DROP TABLE IF EXISTS library_pass_plans;`);
 }
 
 function runDbMigrations() {
@@ -277,6 +280,55 @@ export function initDatabase() {
   `);
 
   safeExec(`
+  CREATE TABLE IF NOT EXISTS books (
+    id TEXT PRIMARY KEY NOT NULL,
+    title TEXT,
+    description TEXT,
+    cover_image_url TEXT,
+    visibility TEXT,
+    status TEXT,
+    total_pages INTEGER DEFAULT 0,
+    free_pages INTEGER DEFAULT 0,
+    price_paise INTEGER DEFAULT 0,
+    price_rupees INTEGER DEFAULT 0,
+    has_access INTEGER DEFAULT 0,
+    access_type TEXT DEFAULT 'locked',
+    last_page_no INTEGER DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT,
+    cached_at INTEGER
+  );
+`);
+
+safeExec(`
+  CREATE TABLE IF NOT EXISTS book_pages (
+    book_id TEXT NOT NULL,
+    page_no INTEGER NOT NULL,
+    image_url TEXT,
+    locked INTEGER DEFAULT 0,
+    cached_at INTEGER,
+    PRIMARY KEY (book_id, page_no)
+  );
+`);
+
+safeExec(`
+  CREATE TABLE IF NOT EXISTS library_pass_plans (
+    pricing_id TEXT PRIMARY KEY NOT NULL,
+    goal_class_id TEXT,
+    title TEXT,
+    duration_days INTEGER DEFAULT 0,
+    price_paise INTEGER DEFAULT 0,
+    price_rupees INTEGER DEFAULT 0,
+    original_price_paise INTEGER DEFAULT 0,
+    discount_price_paise INTEGER DEFAULT 0,
+    is_purchased INTEGER DEFAULT 0,
+    has_access INTEGER DEFAULT 0,
+    expires_at TEXT,
+    cached_at INTEGER
+  );
+`);
+
+  safeExec(`
     CREATE INDEX IF NOT EXISTS idx_ebook_nodes_series_parent
     ON ebook_nodes(series_id, parent_id);
   `);
@@ -300,5 +352,21 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_tool_topics_chapter
     ON tool_topics(chapter_id);
   `);
+
+  safeExec(`
+  CREATE INDEX IF NOT EXISTS idx_books_status
+  ON books(status);
+  `);
+
+  safeExec(`
+    CREATE INDEX IF NOT EXISTS idx_book_pages_book
+    ON book_pages(book_id, page_no);
+  `);
+
+  safeExec(`
+    CREATE INDEX IF NOT EXISTS idx_library_pass_goal
+    ON library_pass_plans(goal_class_id);
+  `);
+
   initStudySessionTable();
 }

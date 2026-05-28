@@ -403,4 +403,243 @@ getStudyMaterial(): CachedEbookSeries[] {
     filesCount: Number(row.files_count || 0),
   }));
 },
+saveBooks(items: any[]) {
+  this.init();
+
+  const stmt = db.prepareSync(`
+    INSERT OR REPLACE INTO books
+    (
+      id, title, description, cover_image_url,
+      visibility, status, total_pages, free_pages,
+      price_paise, price_rupees,
+      has_access, access_type,
+      last_page_no, created_at, updated_at, cached_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  try {
+    items.forEach((item) => {
+      const old = db.getFirstSync<any>(
+        `SELECT has_access, access_type, last_page_no FROM books WHERE id = ?`,
+        [item.id]
+      );
+
+      const finalHasAccess = old?.has_access === 1 || item.has_access === true;
+      const finalAccessType = finalHasAccess
+        ? old?.access_type || item.access_type || "purchased"
+        : item.access_type || "locked";
+
+      stmt.executeSync([
+        item.id,
+        item.title || "",
+        item.description || "",
+        item.cover_image_url || "",
+        item.visibility || "public",
+        item.status || "published",
+        Number(item.total_pages || 0),
+        Number(item.free_pages || 0),
+        Number(item.price_paise || 0),
+        Number(item.price_rupees || 0),
+        finalHasAccess ? 1 : 0,
+        finalAccessType,
+        Number(item.last_page_no || old?.last_page_no || 1),
+        item.created_at || "",
+        item.updated_at || "",
+        Date.now(),
+      ]);
+    });
+  } finally {
+    stmt.finalizeSync();
+  }
+},
+
+getBooks() {
+  this.init();
+
+  return db.getAllSync<any>(`
+    SELECT * FROM books
+    ORDER BY datetime(created_at) DESC
+  `);
+},
+
+saveBookDetail(data: any) {
+  this.init();
+
+  const book = data.book;
+  const access = data.access || {};
+  const progress = data.progress || {};
+
+  db.runSync(
+    `
+    INSERT OR REPLACE INTO books
+    (
+      id, title, description, cover_image_url,
+      visibility, status, total_pages, free_pages,
+      price_paise, price_rupees,
+      has_access, access_type,
+      last_page_no, created_at, updated_at, cached_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      book.id,
+      book.title || "",
+      book.description || "",
+      book.cover_image_url || "",
+      book.visibility || "public",
+      book.status || "",
+      Number(book.total_pages || 0),
+      Number(book.free_pages || 0),
+      Number(access.price_paise || 0),
+      Number(access.price_rupees || 0),
+      access.has_access ? 1 : 0,
+      access.access_type || "locked",
+      Number(progress.last_page_no || 1),
+      book.created_at || "",
+      book.updated_at || "",
+      Date.now(),
+    ]
+  );
+},
+
+getBookDetail(bookId: string) {
+  this.init();
+
+  const row = db.getFirstSync<any>(
+    `SELECT * FROM books WHERE id = ?`,
+    [bookId]
+  );
+
+  if (!row) return null;
+
+  return {
+    book: {
+      ...row,
+      has_access: row.has_access === 1,
+    },
+    access: {
+      has_access: row.has_access === 1,
+      has_book_access: row.has_access === 1,
+      access_type: row.access_type || "locked",
+      price_paise: Number(row.price_paise || 0),
+      price_rupees: Number(row.price_rupees || 0),
+    },
+    progress: {
+      last_page_no: Number(row.last_page_no || 1),
+    },
+  };
+},
+
+saveBookPages(bookId: string, pages: any[]) {
+  this.init();
+
+  const stmt = db.prepareSync(`
+    INSERT OR REPLACE INTO book_pages
+    (
+      book_id, page_no, image_url, locked, cached_at
+    )
+    VALUES (?, ?, ?, ?, ?)
+  `);
+
+  try {
+    pages.forEach((page) => {
+      stmt.executeSync([
+        bookId,
+        Number(page.page_no),
+        page.image_url || "",
+        page.locked ? 1 : 0,
+        Date.now(),
+      ]);
+    });
+  } finally {
+    stmt.finalizeSync();
+  }
+},
+
+getBookPages(bookId: string, from: number, limit: number) {
+  this.init();
+
+  return db.getAllSync<any>(
+    `
+    SELECT * FROM book_pages
+    WHERE book_id = ?
+    AND page_no >= ?
+    ORDER BY page_no ASC
+    LIMIT ?
+    `,
+    [bookId, from, limit]
+  );
+},
+
+saveLibraryPassPlans(items: any[]) {
+  this.init();
+
+  const stmt = db.prepareSync(`
+    INSERT OR REPLACE INTO library_pass_plans
+(
+  pricing_id, goal_class_id, title, duration_days,
+  price_paise, price_rupees,
+  original_price_paise, discount_price_paise,
+  is_purchased, has_access, expires_at,
+  cached_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  try {
+    items.forEach((item) => {
+      stmt.executeSync([
+      item.pricing_id,
+      item.goal_class_id || "",
+      item.title || "",
+      Number(item.duration_days || 0),
+      Number(item.price_paise || 0),
+      Number(item.price_rupees || 0),
+      Number(item.original_price_paise || 0),
+      Number(item.discount_price_paise || 0),
+      item.is_purchased ? 1 : 0,
+      item.has_access ? 1 : 0,
+      item.expires_at || null,
+      Date.now(),
+    ]);
+    });
+  } finally {
+    stmt.finalizeSync();
+  }
+},
+
+markLibraryPassPurchased(pricingId: string, goalClassId?: string, expiresAt?: string) {
+  this.init();
+
+  db.runSync(
+    `
+    UPDATE library_pass_plans
+    SET is_purchased = 1,
+        has_access = 1,
+        expires_at = ?,
+        cached_at = ?
+    WHERE pricing_id = ?
+    `,
+    [expiresAt || null, Date.now(), pricingId]
+  );
+},
+
+getLibraryPassPlans(goalClassId?: string) {
+  this.init();
+
+  const rows = goalClassId
+    ? db.getAllSync<any>(
+        `SELECT * FROM library_pass_plans WHERE goal_class_id = ?`,
+        [goalClassId]
+      )
+    : db.getAllSync<any>(`SELECT * FROM library_pass_plans`);
+
+  return rows.map((row) => ({
+    ...row,
+    is_purchased: row.is_purchased === 1,
+    has_access: row.has_access === 1,
+  }));
+},
+
 };

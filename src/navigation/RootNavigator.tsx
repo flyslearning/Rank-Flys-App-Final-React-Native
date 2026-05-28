@@ -52,6 +52,11 @@ import StudyStatsScreen from "../screens/toolscreens/StudyStatsScreen";
 import StudySessionHistoryScreen from "../screens/toolscreens/StudySessionHistoryScreen";
 import Contact from "../screens/extrascreens/Contact"
 import RazorpayWebViewScreen from "../screens/RazorpayWebViewScreen";
+import BooksLibraryScreen from "../screens/ebookscreens/BooksLibraryScreen";
+import BookDetailScreen from "../screens/ebookscreens/BookDetailScreen";
+import BookReaderScreen from "../screens/ebookscreens/BookReaderScreen";
+import LibraryPassPlansScreen from "../screens/ebookscreens/LibraryPassPlansScreen";
+import FlysLibraryScreen from "../screens/ebookscreens/FlysLibraryScreen";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
@@ -298,6 +303,34 @@ function BottomTabs() {
           component={StudySessionHistoryScreen} 
           options={{ title: "Study Statistics" }} 
           />
+          <Stack.Screen
+            name="BooksLibrary"
+            component={BooksLibraryScreen}
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="BookDetail"
+            component={BookDetailScreen}
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="BookReader"
+            component={BookReaderScreen}
+            options={{ headerShown: false }}
+          />
+
+          <Stack.Screen
+            name="LibraryPassPlans"
+            component={LibraryPassPlansScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+          name="FlysLibrary"
+          component={FlysLibraryScreen}
+          options={{ headerShown: false }}
+        />
            </>
           
         )}
