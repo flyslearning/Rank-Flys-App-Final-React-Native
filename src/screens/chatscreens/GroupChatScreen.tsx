@@ -24,7 +24,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth.store";
+import { useChatStore } from "../../store/chat.store";
 import { ChatAPI } from "../../api/chat.api";
+import { useIsFocused } from "@react-navigation/native";
 import PollCard from "../../components/chat/PollCard";
 
 const CHAT_WS = "wss://api.flyslearning.com/chat-ws/api/v1/chat";
@@ -133,6 +135,8 @@ function onlineUserName(u: OnlineUser) {
 export default function GroupChatScreen() {
   const insets = useSafeAreaInsets();
   const auth: any = useAuthStore();
+  const setChatScreenOpen = useChatStore((s) => s.setChatScreenOpen);
+  const markGlobalRead = useChatStore((s) => s.markRead);
   const user: any = auth?.user;
 
   const token =
@@ -206,6 +210,7 @@ export default function GroupChatScreen() {
   const [loading, setLoading] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreOlder, setHasMoreOlder] = useState(true);
+  const isFocused = useIsFocused();
 
   const wsRef = useRef<WebSocket | null>(null);
   const listRef = useRef<FlatList>(null);
@@ -592,6 +597,7 @@ const markRead = useCallback(async () => {
       if (!mounted.current) return;
 
       setMessages(normalize(history));
+      setUnreadCount(0);
       setHasMoreOlder(history.length >= 20);
       initialLoaded.current = true;
 
@@ -630,6 +636,15 @@ const markRead = useCallback(async () => {
       closeSocket(true);
     };
   }, [openChat, connectSocket, closeSocket]);
+useEffect(() => {
+  setChatScreenOpen(isFocused);
+
+  if (isFocused && goalClassID) {
+    setTimeout(() => {
+      markGlobalRead(goalClassID).catch(() => {});
+    }, 800);
+  }
+}, [isFocused, goalClassID, setChatScreenOpen, markGlobalRead]);
 
   const loadOlder = useCallback(async () => {
     if (
@@ -1461,6 +1476,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#DBEAFE",
+    marginLeft: 8,
   },
   body: { flex: 1, backgroundColor: PAGE },
   list: { padding: 14 },

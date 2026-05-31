@@ -15,7 +15,7 @@
         "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api",
         "EXPO_PUBLIC_MENTORSHIP_API": "https://api.flyslearning.com/tools",
         "EXPO_PUBLIC_CHAT_API": "https://api.flyslearning.com/chat/api/v1/chat",
-        "EXPO_PUBLIC_CHAT_WS": "wss://api.flyslearning.com/chat/api/v1/chat"
+        "EXPO_PUBLIC_CHAT_WS": "wss://api.flyslearning.com/chat-ws/api/v1/chat"
         
       }
     },
@@ -29,7 +29,7 @@
         "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api",
         "EXPO_PUBLIC_MENTORSHIP_API": "https://api.flyslearning.com/tools",
         "EXPO_PUBLIC_CHAT_API": "https://api.flyslearning.com/chat/api/v1/chat",
-        "EXPO_PUBLIC_CHAT_WS": "wss://api.flyslearning.com/chat/api/v1/chat"
+        "EXPO_PUBLIC_CHAT_WS": "wss://api.flyslearning.com/chat-ws/api/v1/chat"
       }
     },
     "production": {
@@ -42,7 +42,7 @@
         "EXPO_PUBLIC_TOOL_API": "https://api.flyslearning.com/tools/api",
         "EXPO_PUBLIC_MENTORSHIP_API": "https://api.flyslearning.com/tools",
         "EXPO_PUBLIC_CHAT_API": "https://api.flyslearning.com/chat/api/v1/chat",
-        "EXPO_PUBLIC_CHAT_WS": "wss://api.flyslearning.com/chat/api/v1/chat"
+        "EXPO_PUBLIC_CHAT_WS": "wss://api.flyslearning.com/chat-ws/api/v1/chat"
       }
     }
   },

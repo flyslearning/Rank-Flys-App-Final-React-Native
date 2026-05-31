@@ -13,6 +13,9 @@ type ChatState = {
   loading: boolean;
   loadingOlder: boolean;
   isConnected: boolean;
+  activeGoalClassID: string | null;
+  isChatScreenOpen: boolean;
+  setChatScreenOpen: (open: boolean) => void;
 
   openChat: (goalClassID: string) => Promise<void>;
   loadOlder: (goalClassID: string) => Promise<void>;
@@ -84,10 +87,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   loading: false,
   loadingOlder: false,
   isConnected: false,
+  activeGoalClassID: null,
+  isChatScreenOpen: false,
 
   openChat: async (goalClassID) => {
     const token = useAuthStore.getState().accessToken;
     if (!token || !goalClassID) return;
+    set({ activeGoalClassID: goalClassID });
 
     get().closeChat();
 
@@ -150,12 +156,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const data = JSON.parse(event.data);
 
           if (data.event === "message.created") {
+
+            
             const msg = normalizeIncomingMessage(data.message);
             if (!msg) return;
 
             ChatDb.saveMessages(goalClassID, [msg]);
 
             set((state) => {
+              const incomingID = String(msg.id || msg.message_id || "");
+
+              const alreadyExists = state.messages.some(
+                (m) => String(m.id || m.message_id) === incomingID
+              );
+
+              if (incomingID && alreadyExists) {
+                return state;
+              }
               const withoutPending = state.messages.filter(
                 (m) =>
                   !(
@@ -165,9 +182,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
                   )
               );
 
-              return {
-                messages: mergeMessages(withoutPending, [msg]),
-              };
+              const currentUser: any = useAuthStore.getState().user;
+            const myID = String(currentUser?.id || currentUser?.user_id || "");
+            const senderID = String(msg.user_id || msg.sender_id || "");
+
+            const isMine = myID && senderID && myID === senderID;
+
+            return {
+              messages: mergeMessages(withoutPending, [msg]),
+              unreadCount:
+                isMine || state.isChatScreenOpen
+                  ? state.unreadCount
+                  : state.unreadCount + 1,
+            };
             });
           }
 
@@ -369,20 +396,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   markRead: async (goalClassID) => {
-    const { messages } = get();
-    const lastMessage = messages[messages.length - 1];
+  set({ unreadCount: 0 });
 
-    if (!goalClassID || !lastMessage?.id || String(lastMessage.id).startsWith("temp_")) {
-      return;
-    }
+  const { messages } = get();
+  const lastMessage = messages[messages.length - 1];
 
-    try {
-      await ChatAPI.markRead(goalClassID, lastMessage.id);
-      set({ unreadCount: 0 });
-    } catch (e) {
-      console.log("Mark read error:", e);
-    }
-  },
+  if (!goalClassID || !lastMessage?.id || String(lastMessage.id).startsWith("temp_")) {
+    return;
+  }
+
+  try {
+    await ChatAPI.markRead(goalClassID, lastMessage.id);
+    set({ unreadCount: 0 });
+  } catch (e) {
+    console.log("Mark read error:", e);
+  }
+},
 
   votePoll: async (goalClassID, pollID, optionID) => {
     if (!goalClassID || !pollID || !optionID) return;
@@ -507,7 +536,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ws.send(JSON.stringify({ event: "typing.stop" }));
     }
   },
-
+setChatScreenOpen: (open) => {
+  set({ isChatScreenOpen: open });
+},
   closeChat: () => {
     const ws = get().socket;
 
@@ -516,9 +547,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
 
     set({
-      socket: null,
-      isConnected: false,
-      typingUser: null,
-    });
+  socket: null,
+  isConnected: false,
+  typingUser: null,
+  activeGoalClassID: null,
+});
   },
 }));

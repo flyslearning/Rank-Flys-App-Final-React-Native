@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useEffect, useMemo } from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 
 import { RootStackParamList } from "../types";
+import { useChatStore } from "../store/chat.store";
 
 import { useAuthStore } from "../store/auth.store";
 import { useAppStore } from "../store/app.store";
@@ -58,10 +59,19 @@ import BookReaderScreen from "../screens/ebookscreens/BookReaderScreen";
 import LibraryPassPlansScreen from "../screens/ebookscreens/LibraryPassPlansScreen";
 import FlysLibraryScreen from "../screens/ebookscreens/FlysLibraryScreen";
 
+function parseJwt(token: string) {
+  try {
+    const p = token.split(".")[1];
+    return JSON.parse(atob(p.replace(/-/g, "+").replace(/_/g, "/")));
+  } catch {
+    return {};
+  }
+}
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator();
 
 function BottomTabs() {
+  const unreadCount = useChatStore((s) => s.unreadCount);
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -99,10 +109,20 @@ function BottomTabs() {
       />
 
       <Tab.Screen
-      name="Connect"
-      component={GroupChatScreen}
-      options={{ headerShown: false, tabBarLabel: "Connect" }}
-    />
+        name="Connect"
+        component={GroupChatScreen}
+        options={{
+          headerShown: false,
+          tabBarLabel: "Connect",
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: "red",
+            color: "white",
+            fontSize: 11,
+            fontWeight: "900",
+          },
+        }}
+      />
       <Tab.Screen
         name="Flys"
         component={ReelScreen}
@@ -128,6 +148,31 @@ function BottomTabs() {
     const accessToken = useAuthStore((s) => s.accessToken);
     const isReady = useAuthStore((s) => s.isReady);
     const hasSeenIntro = useAppStore((s) => s.hasSeenIntro);
+    const user = useAuthStore((s: any) => s.user);
+    const openChat = useChatStore((s) => s.openChat);
+    const closeChat = useChatStore((s) => s.closeChat);
+
+    const goalClassID = useMemo(() => {
+      const payload: any = accessToken ? parseJwt(accessToken) : {};
+
+      return String(
+        payload?.goal_class_id ||
+          user?.goal_class_id ||
+          user?.goalClassID ||
+          user?.profile?.goal_class_id ||
+          ""
+      );
+    }, [accessToken, user]);
+    useEffect(() => {
+      if (!accessToken || !goalClassID) return;
+
+      openChat(goalClassID);
+
+      return () => {
+        closeChat();
+      };
+    }, [accessToken, goalClassID, openChat, closeChat]);
+    
 
     if (!isReady) {
       return <SplashScreen />;
