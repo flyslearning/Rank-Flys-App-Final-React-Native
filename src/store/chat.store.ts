@@ -5,8 +5,10 @@ import { useAuthStore } from "./auth.store";
 
 type ChatState = {
   messages: any[];
+  pinnedMessages: any[];
   socket: WebSocket | null;
   onlineCount: number;
+  unreadCount: number;
   typingUser: string | null;
   loading: boolean;
   loadingOlder: boolean;
@@ -15,15 +17,69 @@ type ChatState = {
   openChat: (goalClassID: string) => Promise<void>;
   loadOlder: (goalClassID: string) => Promise<void>;
   sendMessage: (text: string, goalClassID: string) => Promise<void>;
+
+  markRead: (goalClassID: string) => Promise<void>;
+  votePoll: (
+    goalClassID: string,
+    pollID: string,
+    optionID: string
+  ) => Promise<void>;
+  pinMessage: (goalClassID: string, messageID: string) => Promise<void>;
+  unpinMessage: (goalClassID: string, messageID: string) => Promise<void>;
+  closePoll: (goalClassID: string, pollID: string) => Promise<void>;
+
   sendTypingStart: () => void;
   sendTypingStop: () => void;
   closeChat: () => void;
 };
 
+function normalizeIncomingMessage(msg: any) {
+  if (!msg) return msg;
+
+  return {
+    ...msg,
+    type:
+      msg.type === 2 || msg.type === "2"
+        ? "poll"
+        : msg.type === 1 || msg.type === "1"
+        ? "text"
+        : msg.type || "text",
+    poll_id: msg.poll_id || msg.poll?.id || "",
+    poll: msg.poll || null,
+    is_pinned: Boolean(msg.is_pinned),
+  };
+}
+
+function mergeMessages(oldMessages: any[], newMessages: any[]) {
+  const map = new Map<string, any>();
+
+  [...oldMessages, ...newMessages].forEach((msg) => {
+    if (!msg) return;
+
+    const id = String(
+      msg.id || msg.message_id || msg.temp_id || `${Date.now()}_${Math.random()}`
+    );
+
+    map.set(id, {
+      ...(map.get(id) || {}),
+      ...normalizeIncomingMessage(msg),
+      id,
+    });
+  });
+
+  return Array.from(map.values()).sort((a, b) => {
+    const ta = new Date(a.created_at || 0).getTime();
+    const tb = new Date(b.created_at || 0).getTime();
+    return ta - tb;
+  });
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   messages: [],
+  pinnedMessages: [],
   socket: null,
   onlineCount: 0,
+  unreadCount: 0,
   typingUser: null,
   loading: false,
   loadingOlder: false,
@@ -38,21 +94,44 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       set({ loading: true });
 
-      const cached = ChatDb.getMessages(goalClassID);
-      if (cached.length) {
-        set({ messages: cached });
+      const cached = ChatDb.getMessages(goalClassID).map(normalizeIncomingMessage);
+      const cachedPinned =
+        ChatDb.getPinnedMessages?.(goalClassID)?.map(normalizeIncomingMessage) ||
+        [];
+
+      if (cached.length || cachedPinned.length) {
+        set({
+          messages: cached,
+          pinnedMessages: cachedPinned,
+        });
       }
 
       await ChatAPI.join(goalClassID);
 
       const historyRes = await ChatAPI.messages(goalClassID);
-      const history = historyRes.data?.messages || [];
+      const history = (historyRes.data?.messages || []).map(
+        normalizeIncomingMessage
+      );
 
       ChatDb.saveMessages(goalClassID, history);
 
-      set({
-        messages: history,
-      });
+      const pinnedRes = await ChatAPI.pinnedMessages(goalClassID);
+      const pinnedMessages = (
+        pinnedRes.data?.pinned_messages ||
+        pinnedRes.data?.messages ||
+        []
+      ).map(normalizeIncomingMessage);
+
+      ChatDb.savePinnedMessages(goalClassID, pinnedMessages);
+
+      const unreadRes = await ChatAPI.unreadCount(goalClassID);
+      const unreadCount = unreadRes.data?.unread_count || 0;
+
+      set((state) => ({
+        messages: mergeMessages(state.messages, history),
+        pinnedMessages,
+        unreadCount,
+      }));
 
       const onlineRes = await ChatAPI.online(goalClassID);
 
@@ -71,31 +150,83 @@ export const useChatStore = create<ChatState>((set, get) => ({
           const data = JSON.parse(event.data);
 
           if (data.event === "message.created") {
-            const msg = data.message;
+            const msg = normalizeIncomingMessage(data.message);
             if (!msg) return;
 
             ChatDb.saveMessages(goalClassID, [msg]);
 
             set((state) => {
-              const exists = state.messages.some(
-                (m) => String(m.id) === String(msg.id)
-              );
-
-              if (exists) return state;
-
               const withoutPending = state.messages.filter(
                 (m) =>
                   !(
                     m.pending &&
                     m.body === msg.body &&
-                    m.user_id === msg.user_id
+                    String(m.user_id) === String(msg.user_id)
                   )
               );
 
               return {
-                messages: [...withoutPending, msg],
+                messages: mergeMessages(withoutPending, [msg]),
               };
             });
+          }
+
+          if (data.event === "poll.updated") {
+            const poll = data.poll;
+            if (!poll?.id) return;
+
+            ChatDb.updatePoll(goalClassID, poll);
+
+            set((state) => ({
+              messages: state.messages.map((msg) =>
+                String(msg.poll_id) === String(poll.id)
+                  ? {
+                      ...msg,
+                      poll,
+                    }
+                  : msg
+              ),
+            }));
+          }
+
+          if (data.event === "poll.closed") {
+            const poll = data.poll;
+            if (!poll?.id) return;
+
+            ChatDb.closePoll(goalClassID, poll.id);
+
+            set((state) => ({
+              messages: state.messages.map((msg) =>
+                String(msg.poll_id) === String(poll.id)
+                  ? {
+                      ...msg,
+                      poll: {
+                        ...(msg.poll || {}),
+                        ...poll,
+                        is_active: false,
+                      },
+                    }
+                  : msg
+              ),
+            }));
+          }
+
+          if (data.event === "pinned.updated") {
+            const pinnedMessages = (
+              data.pinned_messages ||
+              data.messages ||
+              []
+            ).map(normalizeIncomingMessage);
+
+            ChatDb.savePinnedMessages(goalClassID, pinnedMessages);
+
+            set({
+              pinnedMessages,
+            });
+          }
+
+          if (data.event === "message.read") {
+            set({ unreadCount: 0 });
           }
 
           if (data.event === "typing.start") {
@@ -153,22 +284,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       const res = await ChatAPI.messages(goalClassID, before);
-      const older = res.data?.messages || [];
+      const older = (res.data?.messages || []).map(normalizeIncomingMessage);
 
       if (older.length) {
         ChatDb.saveMessages(goalClassID, older);
 
-        set((state) => {
-          const ids = new Set(state.messages.map((m) => String(m.id)));
-
-          const uniqueOlder = older.filter(
-            (m: any) => !ids.has(String(m.id))
-          );
-
-          return {
-            messages: [...uniqueOlder, ...state.messages],
-          };
-        });
+        set((state) => ({
+          messages: mergeMessages(older, state.messages),
+        }));
       }
     } catch (e) {
       console.log("Load older error:", e);
@@ -182,10 +305,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!clean || !goalClassID) return;
 
     const user: any = useAuthStore.getState().user;
+    const tempID = `temp_${Date.now()}`;
 
     const tempMsg = {
-      id: `temp_${Date.now()}`,
-      temp_id: `temp_${Date.now()}`,
+      id: tempID,
+      temp_id: tempID,
       goal_class_id: goalClassID,
       user_id: user?.id || user?.user_id || "",
       user_name:
@@ -200,7 +324,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
 
     set((state) => ({
-      messages: [...state.messages, tempMsg],
+      messages: mergeMessages(state.messages, [tempMsg]),
     }));
 
     const ws = get().socket;
@@ -209,6 +333,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (ws?.readyState === WebSocket.OPEN) {
         ws.send(
           JSON.stringify({
+            event: "message.send",
             body: clean,
             type: "text",
           })
@@ -218,14 +343,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
 
       const res = await ChatAPI.sendHTTP(goalClassID, clean);
-      const msg = res.data?.message;
+      const msg = normalizeIncomingMessage(res.data?.message);
 
       if (msg) {
         ChatDb.saveMessages(goalClassID, [msg]);
 
         set((state) => ({
-          messages: state.messages.map((m) =>
-            m.id === tempMsg.id ? msg : m
+          messages: mergeMessages(
+            state.messages.filter((m) => m.id !== tempMsg.id),
+            [msg]
           ),
         }));
       }
@@ -234,9 +360,135 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
       set((state) => ({
         messages: state.messages.map((m) =>
-          m.id === tempMsg.id ? { ...m, failed: true, pending: false } : m
+          m.id === tempMsg.id
+            ? { ...m, failed: true, pending: false }
+            : m
         ),
       }));
+    }
+  },
+
+  markRead: async (goalClassID) => {
+    const { messages } = get();
+    const lastMessage = messages[messages.length - 1];
+
+    if (!goalClassID || !lastMessage?.id || String(lastMessage.id).startsWith("temp_")) {
+      return;
+    }
+
+    try {
+      await ChatAPI.markRead(goalClassID, lastMessage.id);
+      set({ unreadCount: 0 });
+    } catch (e) {
+      console.log("Mark read error:", e);
+    }
+  },
+
+  votePoll: async (goalClassID, pollID, optionID) => {
+    if (!goalClassID || !pollID || !optionID) return;
+
+    try {
+      const res = await ChatAPI.votePoll(goalClassID, pollID, optionID);
+      const poll = res.data?.poll;
+
+      if (!poll?.id) return;
+
+      ChatDb.updatePoll(goalClassID, poll);
+
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          String(msg.poll_id) === String(poll.id)
+            ? {
+                ...msg,
+                poll,
+              }
+            : msg
+        ),
+      }));
+    } catch (e) {
+      console.log("Vote poll error:", e);
+    }
+  },
+
+  pinMessage: async (goalClassID, messageID) => {
+    if (!goalClassID || !messageID) return;
+
+    try {
+      await ChatAPI.pinMessage(goalClassID, messageID);
+
+      ChatDb.setPinned(goalClassID, messageID, true);
+
+      set((state) => {
+        const updatedMessages = state.messages.map((msg) =>
+          String(msg.id) === String(messageID)
+            ? {
+                ...msg,
+                is_pinned: true,
+                pinned_at: new Date().toISOString(),
+              }
+            : msg
+        );
+
+        return {
+          messages: updatedMessages,
+          pinnedMessages: updatedMessages.filter((msg) => msg.is_pinned),
+        };
+      });
+    } catch (e) {
+      console.log("Pin message error:", e);
+    }
+  },
+
+  unpinMessage: async (goalClassID, messageID) => {
+    if (!goalClassID || !messageID) return;
+
+    try {
+      await ChatAPI.unpinMessage(goalClassID, messageID);
+
+      ChatDb.setPinned(goalClassID, messageID, false);
+
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          String(msg.id) === String(messageID)
+            ? {
+                ...msg,
+                is_pinned: false,
+                pinned_at: "",
+              }
+            : msg
+        ),
+        pinnedMessages: state.pinnedMessages.filter(
+          (msg) => String(msg.id) !== String(messageID)
+        ),
+      }));
+    } catch (e) {
+      console.log("Unpin message error:", e);
+    }
+  },
+
+  closePoll: async (goalClassID, pollID) => {
+    if (!goalClassID || !pollID) return;
+
+    try {
+      await ChatAPI.closePoll(goalClassID, pollID);
+
+      ChatDb.closePoll(goalClassID, pollID);
+
+      set((state) => ({
+        messages: state.messages.map((msg) =>
+          String(msg.poll_id) === String(pollID)
+            ? {
+                ...msg,
+                poll: {
+                  ...(msg.poll || {}),
+                  is_active: false,
+                },
+              }
+            : msg
+        ),
+      }));
+    } catch (e) {
+      console.log("Close poll error:", e);
     }
   },
 

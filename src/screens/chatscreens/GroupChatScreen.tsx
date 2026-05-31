@@ -19,11 +19,13 @@ import {
   StatusBar,
   AppState,
   Animated,
+  Modal,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../store/auth.store";
 import { ChatAPI } from "../../api/chat.api";
+import PollCard from "../../components/chat/PollCard";
 
 const CHAT_WS = "wss://api.flyslearning.com/chat-ws/api/v1/chat";
 
@@ -61,6 +63,13 @@ type Msg = {
   author_role?: string;
   profile?: { role?: string; user_role?: string };
   user?: { role?: string; user_role?: string };
+  poll_id?: string;
+  poll?: any;
+  is_pinned?: boolean;
+  pinned_at?: string;
+  reply_to_message_id?: string;
+  reply_to_body?: string;
+  reply_to_user_name?: string;
 };
 
 type OnlineUser = {
@@ -175,9 +184,21 @@ export default function GroupChatScreen() {
   )
     .trim()
     .toLowerCase();
+  const canCreatePoll =
+  myRole.includes("teacher") || myRole.includes("admin");
 
   const [messages, setMessages] = useState<Msg[]>([]);
+  const [pinnedMessages, setPinnedMessages] = useState<Msg[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [input, setInput] = useState("");
+  const [replyTo, setReplyTo] = useState<Msg | null>(null);
+  const [menuMessage, setMenuMessage] = useState<Msg | null>(null);
+  const [showMessageMenu, setShowMessageMenu] = useState(false);
+  const [highlightedMessageID, setHighlightedMessageID] = useState<string | null>(null);
+  const [showPollPanel, setShowPollPanel] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState(["", ""]);
+  const [creatingPoll, setCreatingPoll] = useState(false);
   const [onlineCount, setOnlineCount] = useState(0);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
@@ -252,6 +273,24 @@ export default function GroupChatScreen() {
     setOnlineCount(Number(res.data?.online_count || 0));
     setOnlineUsers(extractOnlineUsers(res.data));
   }, [goalClassID]);
+ const fetchPinnedMessages = useCallback(async () => {
+  const res = await ChatAPI.pinnedMessages(goalClassID);
+  const pinned = res.data?.pinned_messages || [];
+  setPinnedMessages(pinned);
+}, [goalClassID]);
+
+const fetchUnreadCount = useCallback(async () => {
+  const res = await ChatAPI.unreadCount(goalClassID);
+  setUnreadCount(Number(res.data?.unread_count || 0));
+}, [goalClassID]);
+
+const markRead = useCallback(async () => {
+  const latest = messages[messages.length - 1];
+  if (!latest?.id) return;
+
+  await ChatAPI.markRead(goalClassID, latest.id);
+  setUnreadCount(0);
+}, [goalClassID, messages]);
 
   const closeSocket = useCallback(
   (manual = true, nextStatus: Status = "offline") => {
@@ -402,6 +441,44 @@ export default function GroupChatScreen() {
               setOnlineUsers(users);
             }
           }
+          if (eventName === "poll.updated" && data?.poll) {
+          const poll = data.poll;
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              String(m.poll_id) === String(poll.id)
+                ? { ...m, poll }
+                : m
+            )
+          );
+        }
+
+        if (eventName === "poll.closed" && data?.poll) {
+          const poll = data.poll;
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              String(m.poll_id) === String(poll.id)
+                ? {
+                    ...m,
+                    poll: {
+                      ...(m.poll || {}),
+                      ...poll,
+                      is_active: false,
+                    },
+                  }
+                : m
+            )
+          );
+        }
+
+        if (eventName === "pinned.updated") {
+          setPinnedMessages(data?.pinned_messages || []);
+        }
+
+        if (eventName === "message.read") {
+          setUnreadCount(0);
+        }
 
           if (eventName === "typing.start") {
             const userID = String(data?.user_id || "");
@@ -505,7 +582,12 @@ export default function GroupChatScreen() {
 
       await joinChat();
 
-      const [history] = await Promise.all([fetchMessages(), fetchOnline()]);
+      const [history] = await Promise.all([
+      fetchMessages(),
+      fetchOnline(),
+      fetchPinnedMessages(),
+      fetchUnreadCount(),
+    ]);
 
       if (!mounted.current) return;
 
@@ -520,7 +602,7 @@ export default function GroupChatScreen() {
     } finally {
       if (mounted.current) setLoading(false);
     }
-  }, [token, goalClassID, joinChat, fetchMessages, fetchOnline, connectSocket]);
+  }, [token, goalClassID, joinChat, fetchMessages, fetchOnline,fetchPinnedMessages, fetchUnreadCount, connectSocket]);
 
   useEffect(() => {
     mounted.current = true;
@@ -603,6 +685,84 @@ export default function GroupChatScreen() {
   },
   [sendWs]
 );
+const handlePinMessage = useCallback(async (item: Msg) => {
+  const messageID = String(item.id || item.message_id || "");
+  if (!messageID) return;
+
+  try {
+    await ChatAPI.pinMessage(goalClassID, messageID);
+
+    const res = await ChatAPI.pinnedMessages(goalClassID);
+    setPinnedMessages(res.data?.pinned_messages || []);
+  } catch (e) {
+    console.log("PIN_MESSAGE_ERROR", e);
+  }
+}, [goalClassID]);
+const handleUnpinMessage = useCallback(async (item: Msg) => {
+  const messageID = String(item.id || item.message_id || "");
+  if (!messageID) return;
+
+  try {
+    await ChatAPI.unpinMessage(goalClassID, messageID);
+
+    const res = await ChatAPI.pinnedMessages(goalClassID);
+    setPinnedMessages(res.data?.pinned_messages || []);
+  } catch (e) {
+    console.log("UNPIN_MESSAGE_ERROR", e);
+  }
+}, [goalClassID]);
+  const openMessageMenu = useCallback((item: Msg) => {
+    setMenuMessage(item);
+    setShowMessageMenu(true);
+  }, []);
+  const closeMessageMenu = useCallback(() => {
+  setShowMessageMenu(false);
+  setMenuMessage(null);
+}, []);
+
+const handleReplyFromMenu = useCallback(() => {
+  if (!menuMessage) return;
+  setReplyTo(menuMessage);
+  closeMessageMenu();
+}, [menuMessage, closeMessageMenu]);
+
+const handlePinFromMenu = useCallback(async () => {
+  if (!menuMessage) return;
+
+  if (menuMessage.is_pinned) {
+    await handleUnpinMessage(menuMessage);
+  } else {
+    await handlePinMessage(menuMessage);
+  }
+
+  closeMessageMenu();
+}, [menuMessage, handlePinMessage, handleUnpinMessage, closeMessageMenu]);
+
+const scrollToMessage = useCallback(
+  (messageID: string) => {
+    const originalIndex = messages.findIndex(
+      (m) =>
+        String(m.id || m.message_id) === String(messageID)
+    );
+
+    if (originalIndex < 0) return;
+
+    const reversedIndex = messages.length - 1 - originalIndex;
+
+    listRef.current?.scrollToIndex({
+      index: reversedIndex,
+      animated: true,
+      viewPosition: 0.5,
+    });
+
+    setHighlightedMessageID(messageID);
+
+    setTimeout(() => {
+      setHighlightedMessageID(null);
+    }, 1800);
+  },
+  [messages]
+);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -627,6 +787,9 @@ export default function GroupChatScreen() {
       role: myRole,
       created_at: new Date().toISOString(),
       pending: true,
+      reply_to_message_id: replyTo?.id || replyTo?.message_id || "",
+      reply_to_body: replyTo?.body || replyTo?.message || "",
+      reply_to_user_name: replyTo?.user_name || replyTo?.name || "",
     };
 
     setMessages((prev) => normalize([...prev, optimistic]));
@@ -636,8 +799,10 @@ export default function GroupChatScreen() {
     });
 
     const ok = sendWs({
-      body: text,
-      type: "text",
+    event: "message.send",
+    body: text,
+    type: "text",
+    reply_to_message_id: replyTo?.id || replyTo?.message_id || undefined,
     });
 
     if (!ok) {
@@ -647,6 +812,7 @@ export default function GroupChatScreen() {
         )
       );
       return;
+      setReplyTo(null);
     }
 
     setTimeout(() => {
@@ -657,6 +823,41 @@ export default function GroupChatScreen() {
       );
     }, 1800);
   }, [input, status, sendWs, myUserID, myName, myRole]);
+
+  const handleCreatePoll = useCallback(async () => {
+  const question = pollQuestion.trim();
+  const options = pollOptions.map((x) => x.trim()).filter(Boolean);
+
+  if (!question || options.length < 2) return;
+
+  try {
+    setCreatingPoll(true);
+
+    const res = await ChatAPI.createPoll(goalClassID, {
+      question,
+      options,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    });
+
+    const msg = res.data?.message;
+
+    if (msg) {
+      setMessages((prev) => normalize([...prev, msg]));
+    }
+
+    setPollQuestion("");
+    setPollOptions(["", ""]);
+    setShowPollPanel(false);
+
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    });
+  } catch (e) {
+    console.log("CREATE_POLL_ERROR", e);
+  } finally {
+    setCreatingPoll(false);
+  }
+}, [pollQuestion, pollOptions, goalClassID]);
 
   const statusMeta = {
     connected: { text: `${onlineCount} online`, color: GREEN },
@@ -678,7 +879,58 @@ export default function GroupChatScreen() {
   return (
     <View style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <Modal
+  visible={showMessageMenu}
+  transparent
+  animationType="fade"
+  onRequestClose={closeMessageMenu}
+>
+  <TouchableOpacity
+    activeOpacity={1}
+    style={styles.menuOverlay}
+    onPress={closeMessageMenu}
+  >
+    <View style={styles.messageMenu}>
+      <View style={styles.menuHandle} />
 
+      <Text style={styles.menuTitle}>Message Options</Text>
+
+      <TouchableOpacity style={styles.menuItem} onPress={handleReplyFromMenu}>
+        <View style={styles.menuIconBox}>
+          <Ionicons name="return-up-back" size={19} color={BLUE} />
+        </View>
+        <View>
+          <Text style={styles.menuItemTitle}>Reply</Text>
+          <Text style={styles.menuItemSub}>Reply to this message</Text>
+        </View>
+      </TouchableOpacity>
+
+      {canCreatePoll && (
+        <TouchableOpacity style={styles.menuItem} onPress={handlePinFromMenu}>
+          <View style={styles.menuIconBox}>
+            <Ionicons
+              name={menuMessage?.is_pinned ? "remove-circle" : "pin"}
+              size={19}
+              color={BLUE}
+            />
+          </View>
+          <View>
+            <Text style={styles.menuItemTitle}>
+              {menuMessage?.is_pinned ? "Unpin Message" : "Pin Message"}
+            </Text>
+            <Text style={styles.menuItemSub}>
+              {menuMessage?.is_pinned ? "Remove from top bar" : "Show at top"}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity style={styles.menuCancel} onPress={closeMessageMenu}>
+        <Text style={styles.menuCancelText}>Cancel</Text>
+      </TouchableOpacity>
+    </View>
+  </TouchableOpacity>
+</Modal>
       <KeyboardAvoidingView
         style={styles.safe}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -706,7 +958,85 @@ export default function GroupChatScreen() {
           <TouchableOpacity style={styles.refresh} onPress={() => connectSocket()}>
             <Ionicons name="flash" size={20} color={BLUE} />
           </TouchableOpacity>
+          {canCreatePoll && (
+          <TouchableOpacity
+            style={styles.refresh}
+            onPress={() => setShowPollPanel((v) => !v)}
+          >
+            <Ionicons name="bar-chart" size={20} color={BLUE} />
+          </TouchableOpacity>
+        )}
         </View>
+
+        {!!pinnedMessages.length && (
+      <TouchableOpacity
+          activeOpacity={0.85}
+          style={styles.pinnedBar}
+          onPress={() => {
+            const pinned = pinnedMessages[0];
+            const id = String(pinned?.id || pinned?.message_id || "");
+            if (id) scrollToMessage(id);
+          }}
+        >
+        <Ionicons name="pin" size={15} color={BLUE} />
+        <Text style={styles.pinnedText} numberOfLines={1}>
+          {pinnedMessages[0]?.body || pinnedMessages[0]?.poll?.question || "Pinned message"}
+        </Text>
+      </TouchableOpacity>
+    )}
+        {showPollPanel && canCreatePoll && (
+  <View style={styles.pollPanel}>
+    <Text style={styles.pollPanelTitle}>Create Poll</Text>
+
+    <TextInput
+      value={pollQuestion}
+      onChangeText={setPollQuestion}
+      placeholder="Poll question..."
+      placeholderTextColor="#9CA3AF"
+      style={styles.pollInput}
+    />
+
+    {pollOptions.map((option, index) => (
+      <TextInput
+        key={index}
+        value={option}
+        onChangeText={(text) => {
+          setPollOptions((prev) =>
+            prev.map((x, i) => (i === index ? text : x))
+          );
+        }}
+        placeholder={`Option ${index + 1}`}
+        placeholderTextColor="#9CA3AF"
+        style={styles.pollInput}
+      />
+    ))}
+
+        <View style={styles.pollActions}>
+          {pollOptions.length < 5 && (
+            <TouchableOpacity
+              style={styles.pollSmallBtn}
+              onPress={() => setPollOptions((prev) => [...prev, ""])}
+            >
+              <Ionicons name="add" size={16} color={BLUE} />
+              <Text style={styles.pollSmallBtnText}>Add option</Text>
+            </TouchableOpacity>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.pollCreateBtn,
+              creatingPoll && { opacity: 0.6 },
+            ]}
+            disabled={creatingPoll}
+            onPress={handleCreatePoll}
+          >
+            <Text style={styles.pollCreateText}>
+              {creatingPoll ? "Creating..." : "Create"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    )}
 
         <View style={styles.body}>
           {loading ? (
@@ -722,7 +1052,44 @@ export default function GroupChatScreen() {
               keyExtractor={(item, index) => keyOf(item, index)}
               renderItem={({ item }) => {
                 const senderID = String(item.user_id || item.sender_id || "");
-                return <Bubble item={item} isMine={myIds.has(senderID)} />;
+                if (item.type === "poll" || item.poll_id || item.poll) {
+            return (
+              <PollCard
+                item={item}
+                isMine={myIds.has(senderID)}
+                goalClassID={goalClassID}
+                isTeacherOrAdmin={myRole.includes("teacher") || myRole.includes("admin")}
+                onVote={async (pollID, optionID) => {
+                  const res = await ChatAPI.votePoll(goalClassID, pollID, optionID);
+                  const poll = res.data?.poll;
+
+                  if (poll) {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        String(m.poll_id) === String(poll.id)
+                          ? { ...m, poll }
+                          : m
+                      )
+                    );
+                  }
+                }}
+                onClose={async (pollID) => {
+                  await ChatAPI.closePoll(goalClassID, pollID);
+                }}
+              />
+            );
+          }
+
+          return (
+              <Bubble
+            item={item}
+            isMine={myIds.has(senderID)}
+            onLongPress={() => openMessageMenu(item)}
+            isHighlighted={
+              highlightedMessageID === String(item.id || item.message_id)
+            }
+          />
+            );
               }}
               contentContainerStyle={[
                 styles.list,
@@ -763,7 +1130,22 @@ export default function GroupChatScreen() {
                 </Text>
               </View>
             )}
+            {replyTo && (
+              <View style={styles.replyPreview}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.replyTitle}>
+                    Replying to {replyTo.user_name || replyTo.name || "Student"}
+                  </Text>
+                  <Text style={styles.replyBody} numberOfLines={1}>
+                    {replyTo.body || replyTo.message || replyTo.poll?.question || "Poll"}
+                  </Text>
+                </View>
 
+                <TouchableOpacity onPress={() => setReplyTo(null)}>
+                  <Ionicons name="close-circle" size={22} color={MUTED} />
+                </TouchableOpacity>
+              </View>
+            )}
             <View
               style={[
                 styles.inputWrap,
@@ -805,7 +1187,18 @@ export default function GroupChatScreen() {
   );
 }
 
-const Bubble = memo(({ item, isMine }: { item: Msg; isMine: boolean }) => {
+const Bubble = memo(
+  ({
+    item,
+    isMine,
+    onLongPress,
+isHighlighted,
+}: {
+  item: Msg;
+  isMine: boolean;
+  onLongPress?: () => void;
+  isHighlighted?: boolean;
+}) => {
 const roleLabel = prettyRole(item);
 const isAdmin = roleLabel === "Admin";
 const isTeacher = roleLabel === "Teacher";
@@ -834,7 +1227,9 @@ const body = item.body || item.message || "";
   </>
 )}
 
-      <View
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onLongPress={onLongPress}
         style={[
           styles.bubble,
           isMine ? styles.myBubble : styles.otherBubble,
@@ -842,6 +1237,7 @@ const body = item.body || item.message || "";
           isAdmin && styles.adminBubble,
           isMine && isTeacher && styles.myVerifiedBubble,
           isMine && isAdmin && styles.myAdminBubble,
+          isHighlighted && styles.highlightedBubble,
         ]}
       >
         {isVerified && <BlueTickGlow color={isAdmin ? "#EF4444" : "#2563EB"} />}
@@ -884,7 +1280,16 @@ const body = item.body || item.message || "";
             </View>
           </View>
         )}
-
+        {!!item.reply_to_message_id && (
+          <View style={styles.replyInBubble}>
+            <Text style={styles.replyInBubbleName}>
+              {item.reply_to_user_name || "Student"}
+            </Text>
+            <Text style={styles.replyInBubbleText} numberOfLines={1}>
+              {item.reply_to_body || "Original message"}
+            </Text>
+          </View>
+        )}
         <Text
           style={[
             styles.msg,
@@ -909,7 +1314,7 @@ const body = item.body || item.message || "";
             ? "Sending..."
             : formatTime(item.created_at)}
         </Text>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 });
@@ -1108,7 +1513,12 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: 18,
   },
-  myBubble: { backgroundColor: BLUE, borderBottomRightRadius: 5 },
+  myBubble: {
+  backgroundColor: "#FFFFFF", // light grey
+  borderWidth: 1,
+  borderColor: "#E5E7EB",
+  borderBottomRightRadius: 5,
+},
   otherBubble: {
     backgroundColor: BG,
     borderBottomLeftRadius: 5,
@@ -1117,7 +1527,9 @@ const styles = StyleSheet.create({
   },
   name: { fontSize: 12, fontWeight: "900", color: BLUE, marginBottom: 4 },
   msg: { fontSize: 15, lineHeight: 21, fontWeight: "500", color: TEXT },
-  myMsg: { color: "#FFFFFF" },
+  myMsg: {
+  color: "#111827",
+  },
   time: {
     alignSelf: "flex-end",
     marginTop: 5,
@@ -1125,7 +1537,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: MUTED,
   },
-  myTime: { color: "#DBEAFE" },
+  myTime: {
+  color: "#070707",
+  },
   bottom: { backgroundColor: BG },
   typing: {
     paddingHorizontal: 18,
@@ -1209,8 +1623,9 @@ verifiedBubble: {
   elevation: 4,
 },
 myVerifiedBubble: {
-  backgroundColor: BLUE,
-  borderColor: "#93C5FD",
+  backgroundColor: "#F3F4F6",
+  borderColor: "#D1D5DB",
+  borderWidth: 1,
 },
 
 tickGlow: {
@@ -1326,6 +1741,228 @@ verifiedTime: { color: "#1D4ED8" },
 adminTime: {
   color: "#B91C1C",
   fontWeight: "900",
+},
+pinnedBar: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 6,
+  paddingHorizontal: 14,
+  paddingVertical: 8,
+  backgroundColor: "#EFF6FF",
+  borderBottomWidth: 1,
+  borderBottomColor: "#DBEAFE",
+},
+
+pollPanel: {
+  backgroundColor: "#FFFFFF",
+  padding: 14,
+  borderBottomWidth: 1,
+  borderBottomColor: BORDER,
+},
+
+pollPanelTitle: {
+  fontSize: 15,
+  fontWeight: "900",
+  color: TEXT,
+  marginBottom: 10,
+},
+
+pollInput: {
+  backgroundColor: "#F8FAFC",
+  borderWidth: 1,
+  borderColor: BORDER,
+  borderRadius: 14,
+  paddingHorizontal: 12,
+  paddingVertical: 10,
+  marginBottom: 8,
+  fontSize: 14,
+  fontWeight: "700",
+  color: TEXT,
+},
+
+pollActions: {
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginTop: 4,
+},
+
+pollSmallBtn: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 5,
+  paddingHorizontal: 12,
+  paddingVertical: 9,
+  borderRadius: 14,
+  backgroundColor: "#EFF6FF",
+  borderWidth: 1,
+  borderColor: "#DBEAFE",
+},
+
+pollSmallBtnText: {
+  color: BLUE,
+  fontSize: 12,
+  fontWeight: "900",
+},
+
+pollCreateBtn: {
+  paddingHorizontal: 18,
+  paddingVertical: 10,
+  borderRadius: 14,
+  backgroundColor: BLUE,
+},
+
+pollCreateText: {
+  color: "#FFFFFF",
+  fontSize: 12,
+  fontWeight: "900",
+},
+
+pinnedText: {
+  flex: 1,
+  color: BLUE,
+  fontSize: 12,
+  fontWeight: "900",
+},
+replyPreview: {
+  marginHorizontal: 12,
+  marginTop: 8,
+  padding: 10,
+  borderRadius: 14,
+  backgroundColor: "#EFF6FF",
+  borderWidth: 1,
+  borderColor: "#DBEAFE",
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 10,
+},
+
+replyTitle: {
+  fontSize: 12,
+  fontWeight: "900",
+  color: BLUE,
+},
+
+replyBody: {
+  marginTop: 3,
+  fontSize: 12,
+  fontWeight: "700",
+  color: MUTED,
+},
+
+replyInBubble: {
+  padding: 8,
+  borderRadius: 10,
+  backgroundColor: "rgba(37,99,235,0.10)",
+  borderLeftWidth: 3,
+  borderLeftColor: BLUE,
+  marginBottom: 7,
+},
+
+replyInBubbleName: {
+  fontSize: 11,
+  fontWeight: "900",
+  color: BLUE,
+},
+
+replyInBubbleText: {
+  marginTop: 2,
+  fontSize: 11,
+  fontWeight: "700",
+  color: MUTED,
+},
+menuOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(15,23,42,0.35)",
+  justifyContent: "flex-end",
+},
+
+messageMenu: {
+  backgroundColor: "#FFFFFF",
+  paddingHorizontal: 18,
+  paddingTop: 10,
+  paddingBottom: Platform.OS === "ios" ? 34 : 28,
+  borderTopLeftRadius: 26,
+  borderTopRightRadius: 26,
+  borderWidth: 1,
+  borderColor: "#E0E7FF",
+},
+
+menuHandle: {
+  width: 46,
+  height: 5,
+  borderRadius: 999,
+  backgroundColor: "#CBD5E1",
+  alignSelf: "center",
+  marginBottom: 14,
+},
+
+menuTitle: {
+  fontSize: 17,
+  fontWeight: "900",
+  color: TEXT,
+  marginBottom: 12,
+},
+
+menuItem: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 12,
+  padding: 13,
+  borderRadius: 18,
+  backgroundColor: "#F8FAFC",
+  borderWidth: 1,
+  borderColor: "#E5E7EB",
+  marginBottom: 10,
+},
+
+menuIconBox: {
+  width: 42,
+  height: 42,
+  borderRadius: 16,
+  backgroundColor: "#EFF6FF",
+  alignItems: "center",
+  justifyContent: "center",
+  borderWidth: 1,
+  borderColor: "#DBEAFE",
+},
+
+menuItemTitle: {
+  fontSize: 14,
+  fontWeight: "900",
+  color: TEXT,
+},
+
+menuItemSub: {
+  marginTop: 2,
+  fontSize: 11,
+  fontWeight: "700",
+  color: MUTED,
+},
+
+menuCancel: {
+  marginTop: 4,
+  marginBottom: 26,
+  height: 44,
+  borderRadius: 18,
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: "#EEF2FF",
+},
+
+menuCancelText: {
+  fontSize: 14,
+  fontWeight: "900",
+  color: BLUE,
+},
+highlightedBubble: {
+  borderWidth: 2,
+  borderColor: "#F59E0B",
+  shadowColor: "#F59E0B",
+  shadowOpacity: 0.35,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 4 },
+  elevation: 8,
 },
   sendDisabled: { backgroundColor: "#93C5FD" },
 });
