@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  Alert,
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
@@ -16,96 +15,153 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RootStackParamList } from "../../types";
 import AppInput from "../../components/AppInput";
 import AppButton from "../../components/AppButton";
+import CustomAlert from "../extrascreens/CustomAlert";
 import { AuthAPI } from "../../api/auth.api";
 
 type Props = NativeStackScreenProps<RootStackParamList, "SendOtp">;
 
+const getOtpErrorMessage = (error: any) => {
+  const backendError =
+    error?.response?.data?.error || error?.message || "";
+
+  if (backendError === "invalid email") {
+    return "Please enter a valid email address.";
+  }
+
+  if (backendError === "please wait 30 seconds before requesting another OTP") {
+    return "You can request a new OTP after 30 seconds.";
+  }
+
+  if (backendError === "maximum 5 OTP emails allowed in 15 minutes") {
+    return "You have reached the maximum OTP limit. Please try again after 15 minutes.";
+  }
+
+  if (backendError === "email service timeout, please try again") {
+    return "Email service is currently busy. Please try again.";
+  }
+
+  if (backendError === "failed to send email") {
+    return "Unable to send OTP right now. Please try again.";
+  }
+
+  if (error?.message === "Network Error") {
+    return "No internet connection. Please check your network and try again.";
+  }
+
+  return "Something went wrong. Please try again.";
+};
+
 export default function SendOtpScreen({ navigation }: Props) {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
+
   const insets = useSafeAreaInsets();
 
   const isValidEmail = (value: string) => /\S+@\S+\.\S+/.test(value);
 
+  const showAlert = (title: string, message: string) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
+
   const sendOtp = async () => {
     const cleanEmail = email.trim().toLowerCase();
+
     if (!cleanEmail || !isValidEmail(cleanEmail)) {
-      Alert.alert("Enter valid email");
+      showAlert("Invalid Email", "Please enter a valid email address.");
       return;
     }
 
     try {
       setLoading(true);
+
       await AuthAPI.sendOtp(cleanEmail);
+
       navigation.navigate("VerifyOtp", { email: cleanEmail });
-    } catch {
-      Alert.alert("OTP Failed", "Unable to send OTP");
+    } catch (error: any) {
+      const message = getOtpErrorMessage(error);
+      showAlert("OTP Failed", message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View style={styles.container}>
-        {/* Background Decorative Circles */}
-        <View style={styles.topCircle} />
-        <View style={styles.bottomCircle} />
+    <>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.container}>
+          <View style={styles.topCircle} />
+          <View style={styles.bottomCircle} />
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-          style={{ flex: 1 }}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
-        >
-          <ScrollView 
-            contentContainerStyle={{ flexGrow: 1 }} 
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
           >
-            <View style={styles.inner}>
-              
-              {/* TOP SECTION: Stays at the top */}
-              <View style={styles.topSection}>
-                <LottieView
-                  source={require("../../assets/animations/email.json")}
-                  autoPlay
-                  loop
-                  style={styles.lottie}
-                />
-                <Text style={styles.welcome}>Welcome To</Text>
-                <Text style={styles.brand}>Rank Flys</Text>
+            <ScrollView
+              contentContainerStyle={{ flexGrow: 1 }}
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.inner}>
+                <View style={styles.topSection}>
+                  <LottieView
+                    source={require("../../assets/animations/email.json")}
+                    autoPlay
+                    loop
+                    style={styles.lottie}
+                  />
+
+                  <Text style={styles.welcome}>Welcome To</Text>
+                  <Text style={styles.brand}>Rank Flys</Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.bottomSection,
+                    { marginBottom: insets.bottom + 20 },
+                  ]}
+                >
+                  <AppInput
+                    placeholder="Enter your email"
+                    value={email}
+                    onChangeText={setEmail}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+
+                  <AppButton
+                    title="Continue"
+                    onPress={sendOtp}
+                    loading={loading}
+                    disabled={!email || loading}
+                  />
+
+                  <Text style={styles.footer}>
+                    Secure login • No password required
+                  </Text>
+                </View>
               </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </TouchableWithoutFeedback>
 
-              {/* BOTTOM SECTION: Pushed to bottom via flex-end */}
-              <View style={[
-                styles.bottomSection, 
-                { marginBottom: insets.bottom + 20 }
-              ]}>
-                <AppInput
-                  placeholder="Enter your email"
-                  value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-
-                <AppButton
-                  title="Continue"
-                  onPress={sendOtp}
-                  loading={loading}
-                  disabled={!email || loading}
-                />
-
-                <Text style={styles.footer}>
-                  Secure login • No password required
-                </Text>
-              </View>
-
-            </View>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </View>
-    </TouchableWithoutFeedback>
+      <CustomAlert
+        visible={alertVisible}
+        type="info"
+        title={alertTitle}
+        message={alertMessage}
+        confirmText="Got it"
+        onClose={() => setAlertVisible(false)}
+        onConfirm={() => setAlertVisible(false)}
+      />
+    </>
   );
 }
 
@@ -114,11 +170,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#ffffff",
   },
+
   inner: {
     flex: 1,
-    justifyContent: "space-between", // This pushes topSection to top and bottomSection to bottom
+    justifyContent: "space-between",
   },
-  /* Background */
+
   topCircle: {
     position: "absolute",
     top: -60,
@@ -128,6 +185,7 @@ const styles = StyleSheet.create({
     borderRadius: 140,
     backgroundColor: "#eef2ff",
   },
+
   bottomCircle: {
     position: "absolute",
     bottom: -80,
@@ -137,15 +195,17 @@ const styles = StyleSheet.create({
     borderRadius: 110,
     backgroundColor: "#eef2ff",
   },
-  /* TOP */
+
   topSection: {
     alignItems: "center",
-    marginTop: 60, // Gives some breathing room from the status bar
+    marginTop: 60,
   },
+
   lottie: {
     width: 340,
     height: 200,
   },
+
   welcome: {
     fontSize: 22,
     fontFamily: "Bungee",
@@ -153,6 +213,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: "uppercase",
   },
+
   brand: {
     fontSize: 47,
     fontFamily: "TitanOne",
@@ -161,11 +222,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textTransform: "uppercase",
   },
-  /* BOTTOM */
+
   bottomSection: {
     paddingHorizontal: 24,
-    marginTop: 20, // Ensures it doesn't touch the top section on small screens
+    marginTop: 20,
   },
+
   footer: {
     textAlign: "center",
     fontSize: 12,

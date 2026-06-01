@@ -66,7 +66,7 @@ export default function VerifyOtpScreen({
     useState(false);
 
   // RESEND TIMER
-  const [timer, setTimer] = useState(0);
+  const [timer, setTimer] = useState(30);
 
   // ALERT
   const [alertVisible, setAlertVisible] =
@@ -138,6 +138,63 @@ export default function VerifyOtpScreen({
 
     setAlertVisible(true);
   };
+  const getSendOtpErrorMessage = (error: any) => {
+  const backendError =
+    error?.response?.data?.error || error?.message || "";
+
+  if (backendError === "invalid email") {
+    return "Please enter a valid email address.";
+  }
+
+  if (backendError === "please wait 30 seconds before requesting another OTP") {
+    return "You can request a new OTP after 30 seconds.";
+  }
+
+  if (backendError === "maximum 5 OTP emails allowed in 15 minutes") {
+    return "You have reached the maximum OTP limit. Please try again after 15 minutes.";
+  }
+
+  if (backendError === "email service timeout, please try again") {
+    return "Email service is currently busy. Please try again.";
+  }
+
+  if (backendError === "failed to send email") {
+    return "Unable to send OTP right now. Please try again.";
+  }
+
+  if (error?.message === "Network Error") {
+    return "No internet connection. Please check your network and try again.";
+  }
+
+  return "Unable to send OTP right now. Please try again.";
+};
+
+const getVerifyOtpErrorMessage = (error: any) => {
+  const backendError =
+    error?.response?.data?.error || error?.message || "";
+
+  if (backendError === "invalid otp") {
+    return "Incorrect OTP. Please try again.";
+  }
+
+  if (backendError === "otp expired") {
+    return "OTP has expired. Please request a new OTP.";
+  }
+
+  if (backendError === "too many wrong attempts, please request new otp") {
+    return "Too many incorrect attempts. Please request a new OTP.";
+  }
+
+  if (backendError === "verification already in progress") {
+    return "Verification already in progress. Please wait.";
+  }
+
+  if (error?.message === "Network Error") {
+    return "No internet connection. Please check your network and try again.";
+  }
+
+  return "Verification failed. Please try again.";
+};
 
   // ANDROID BACK
   useEffect(() => {
@@ -267,12 +324,14 @@ export default function VerifyOtpScreen({
           ? "Onboarding"
           : "MainTabs"
       );
-    } catch (error) {
-      showAlert(
-        "Verification Failed",
-        "Invalid or expired OTP"
-      );
-    } finally {
+    } catch (error: any) {
+  const message = getVerifyOtpErrorMessage(error);
+
+  showAlert(
+    "Verification Failed",
+    message
+  );
+  } finally {
       setLoading(false);
     }
   };
@@ -289,16 +348,18 @@ export default function VerifyOtpScreen({
       await AuthAPI.sendOtp(email);
 
       // START TIMER
-      setTimer(60);
+      setTimer(30);
 
       showAlert(
         "OTP Sent",
-        "A new OTP has been sent successfully"
+        "OTP sent successfully."
       );
-    } catch (error) {
+    } catch (error: any) {
+      const message = getSendOtpErrorMessage(error);
+
       showAlert(
-        "Failed",
-        "Unable to resend OTP"
+        "OTP Failed",
+        message
       );
     } finally {
       setResending(false);
