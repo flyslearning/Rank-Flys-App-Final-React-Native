@@ -18,7 +18,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
-
+import ImageViewer from "react-native-image-zoom-viewer";
 import { EbookAPI } from "../../api/ebook.api";
 import { EbookDb } from "../../db/ebookDb";
 import BookPaywall from "../../components/books/BookPaywall";
@@ -69,7 +69,6 @@ export default function BookReaderScreen({ route, navigation }: any) {
   const [bookmarks, setBookmarks] = useState<any[]>([]);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
-  const [zoomScale, setZoomScale] = useState(1);
 
   const scrollX = useRef(new Animated.Value(0)).current;
   const listRef = useRef<any>(null);
@@ -213,10 +212,10 @@ export default function BookReaderScreen({ route, navigation }: any) {
           );
 
           if (targetIndex >= 0) {
-            listRef.current?.scrollToIndex({
-              index: targetIndex,
-              animated: false,
-            });
+            listRef.current?.scrollToOffset({
+            offset: targetIndex * pageWidth,
+            animated: false,
+          });
           }
         }, 300);
       }
@@ -250,10 +249,62 @@ export default function BookReaderScreen({ route, navigation }: any) {
     [bookId, nextFrom, setFallbackPage]
   );
 
+  const loadPreviousPages = useCallback(
+  async (currentFirstPage: number) => {
+    if (loadingRef.current) return;
+    if (currentFirstPage <= 1) return;
 
-  const saveProgress = useCallback(() => {
-    EbookAPI.saveBookProgress?.(bookId, currentPage.current).catch(() => {});
-  }, [bookId]);
+    const oldFirstPage = currentFirstPage;
+    const from = Math.max(1, currentFirstPage - PAGE_LIMIT);
+    const limit = currentFirstPage - from;
+
+    if (limit <= 0) return;
+
+    try {
+      loadingRef.current = true;
+      setLoading(true);
+
+      const res = await EbookAPI.getBookPages(bookId, from, limit);
+      const data = res.data?.data || res.data;
+      const list = data?.pages || [];
+
+      if (!list.length) return;
+
+      const localList = await Promise.all(list.map(resolvePageImage));
+
+      const addedCount = localList.length;
+
+      setPages((prev) => {
+        const map = new Map();
+
+        [...localList, ...prev].forEach((page: any) => {
+          map.set(Number(page.page_no), page);
+        });
+
+        return Array.from(map.values()).sort(
+          (a: any, b: any) => Number(a.page_no) - Number(b.page_no)
+        );
+      });
+
+      setTimeout(() => {
+        const newIndex = addedCount;
+        listRef.current?.scrollToOffset({
+          offset: newIndex * pageWidth,
+          animated: false,
+        });
+      }, 100);
+
+      EbookDb.saveBookPages?.(bookId, localList);
+    } catch (error: any) {
+      console.log("Previous pages load failed:", getApiMessage(error));
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+    }
+  },
+  [bookId, pageWidth]
+);
+
 
   useEffect(() => {
   const initialFrom = Math.max(1, Number(startPage) - 4);
@@ -270,13 +321,25 @@ export default function BookReaderScreen({ route, navigation }: any) {
   loadBookmarks();
 }, [bookId, startPage]);
 
-  useEffect(() => {
-    const timer = setInterval(saveProgress, 20000);
-    return () => {
-      clearInterval(timer);
-      saveProgress();
-    };
-  }, [saveProgress]);
+const handleSaveProgress = async () => {
+  try {
+    const pageNo = Number(currentPage.current);
+
+    await EbookAPI.saveBookProgress?.(bookId, pageNo);
+
+    Alert.alert(
+      "Saved",
+      `Page ${pageNo} saved successfully`
+    );
+  } catch (error: any) {
+    console.log("Save progress failed:", getApiMessage(error));
+
+    Alert.alert(
+      "Error",
+      "Progress save nahi ho paya."
+    );
+  }
+};
 
   const handleBookmark = async () => {
   const pageNo = currentPage.current;
@@ -324,7 +387,7 @@ export default function BookReaderScreen({ route, navigation }: any) {
   await loadPages(initialFrom, true, pageNo);
 };
 
-  const onMomentumEnd = (event: any) => {
+ const onMomentumEnd = (event: any) => {
   const index = Math.round(event.nativeEvent.contentOffset.x / pageWidth);
   const page = pages[index];
 
@@ -333,15 +396,24 @@ export default function BookReaderScreen({ route, navigation }: any) {
     setPageLabel(page.page_no);
   }
 
+  // Next pages load
   if (index >= pages.length - 2 && nextFrom && !loadingRef.current) {
     loadPages(nextFrom);
+  }
+
+  // Previous pages load
+  if (index <= 1 && pages.length > 0 && !loadingRef.current) {
+  const firstPage = Number(pages[0]?.page_no || 1);
+
+  if (firstPage > 1) {
+    loadPreviousPages(firstPage);
+  }
   }
 };
 
   const openZoom = (uri: string) => {
-    setZoomScale(1);
-    setZoomImage(uri);
-  };
+  setZoomImage(uri);
+};
 
   const renderPage = ({ item, index }: any) => {
     const inputRange = [
@@ -497,10 +569,16 @@ export default function BookReaderScreen({ route, navigation }: any) {
           </Text>
         </Pressable>
 
+        <Pressable onPress={handleSaveProgress} style={styles.saveFooterBtn}>
+          <Ionicons name="save-outline" size={19} color="#FFFFFF" />
+          <Text style={styles.saveFooterText}>Save</Text>
+        </Pressable>
+
         <View style={styles.pagePill}>
           <Ionicons name="book-outline" size={16} color="#2563EB" />
           <Text style={styles.pagePillText}>{pageLabel}</Text>
         </View>
+
       </View>
 
       {loading && pages.length > 0 && (
@@ -510,63 +588,44 @@ export default function BookReaderScreen({ route, navigation }: any) {
         </View>
       )}
 
-      <Modal visible={!!zoomImage} animationType="fade" transparent>
-        <View style={styles.zoomOverlay}>
-          <View style={styles.zoomTopBar}>
-            <Pressable style={styles.zoomRoundBtn} onPress={() => setZoomImage(null)}>
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </Pressable>
+      <Modal
+  visible={!!zoomImage}
+  transparent
+  animationType="fade"
+  onRequestClose={() => setZoomImage(null)}
+>
+  <View style={styles.zoomOverlay}>
+    {zoomImage && (
+      <>
+        <ImageViewer
+          imageUrls={[{ url: zoomImage }]}
+          enableSwipeDown
+          onSwipeDown={() => setZoomImage(null)}
+          onCancel={() => setZoomImage(null)}
+          enableImageZoom
+          saveToLocalByLongPress={false}
+          renderIndicator={() => <></>}
+          backgroundColor="rgba(0,0,0,0.96)"
+        />
 
-            <Text style={styles.zoomTitle}>Zoom</Text>
-
-            <Pressable style={styles.zoomRoundBtn} onPress={() => setZoomScale(1)}>
-              <Ionicons name="refresh" size={21} color="#FFFFFF" />
-            </Pressable>
-          </View>
-
-          <ScrollView
-            style={styles.zoomScroll}
-            contentContainerStyle={styles.zoomContent}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            showsVerticalScrollIndicator={false}
+        <View style={styles.zoomTopBar}>
+          <Pressable
+            style={styles.zoomRoundBtn}
+            onPress={() => setZoomImage(null)}
           >
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.zoomInnerContent}
-            >
-              {zoomImage && (
-                <Image
-                  source={{ uri: zoomImage }}
-                  style={{
-                    width: screen.width * zoomScale,
-                    height: screen.width * A4_RATIO * zoomScale,
-                  }}
-                  resizeMode="contain"
-                />
-              )}
-            </ScrollView>
-          </ScrollView>
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </Pressable>
 
-          <View style={styles.zoomControls}>
-            <Pressable
-              style={styles.zoomControlBtn}
-              onPress={() => setZoomScale((v) => Math.max(1, Number((v - 0.25).toFixed(2))))}
-            >
-              <Ionicons name="remove" size={22} color="#FFFFFF" />
-            </Pressable>
+          <Text style={styles.zoomTitle}>Pinch to Zoom</Text>
 
-            <Text style={styles.zoomScaleText}>{Math.round(zoomScale * 100)}%</Text>
-
-            <Pressable
-              style={styles.zoomControlBtn}
-              onPress={() => setZoomScale((v) => Math.min(4, Number((v + 0.25).toFixed(2))))}
-            >
-              <Ionicons name="add" size={22} color="#FFFFFF" />
-            </Pressable>
+          <View style={styles.zoomRoundBtn}>
+            <Ionicons name="hand-left-outline" size={21} color="#FFFFFF" />
           </View>
         </View>
-      </Modal>
+      </>
+    )}
+  </View>
+</Modal>
 
       <Modal visible={showBookmarks} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -719,6 +778,22 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   primaryFooterText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
+  saveFooterBtn: {
+  height: 48,
+  borderRadius: 16,
+  backgroundColor: "#16A34A",
+  alignItems: "center",
+  justifyContent: "center",
+  flexDirection: "row",
+  gap: 6,
+  paddingHorizontal: 14,
+  elevation: 4,
+},
+saveFooterText: {
+  color: "#FFFFFF",
+  fontSize: 13,
+  fontWeight: "900",
+},
   pagePill: {
     height: 48,
     minWidth: 70,
