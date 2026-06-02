@@ -9,6 +9,7 @@ import {
   Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import SectionTitle from "../home/SectionTitle";
 import BookCard from "./BookCard";
 import { EbookAPI } from "../../api/ebook.api";
@@ -26,13 +27,13 @@ export default function BooksLibrarySlider({ navigation }: any) {
     Animated.loop(
       Animated.sequence([
         Animated.timing(scaleAnim, {
-          toValue: 1.05,
-          duration: 700,
+          toValue: 1.04,
+          duration: 750,
           useNativeDriver: true,
         }),
         Animated.timing(scaleAnim, {
           toValue: 1,
-          duration: 700,
+          duration: 750,
           useNativeDriver: true,
         }),
       ])
@@ -108,25 +109,48 @@ export default function BooksLibrarySlider({ navigation }: any) {
           ))}
 
           <Animated.View
-              style={[
-                styles.viewAllAnimWrap,
-                { transform: [{ scale: scaleAnim }] },
-              ]}
-            >
+            style={[
+              styles.viewAllAnimWrap,
+              { transform: [{ scale: scaleAnim }] },
+            ]}
+          >
             <TouchableOpacity
-              style={styles.viewAllCard}
+              style={styles.viewAllBook}
               onPress={goToFlysLibrary}
-              activeOpacity={0.85}
+              activeOpacity={0.88}
             >
-              <View style={styles.viewAllIcon}>
-                <Ionicons name="library" size={25} color="#2563EB" />
-              </View>
+              <View style={styles.viewAllShadow} />
 
-              <Text style={styles.viewAllText}>Explore Full Library</Text>
+              <LinearGradient
+                colors={["#EEF4FF", "#DBEAFE", "#BFDBFE"]}
+                style={styles.viewAllCover}
+              >
+                <View style={styles.viewAllTopBadge}>
+                  <Ionicons name="sparkles" size={12} color="#2563EB" />
+                  <Text style={styles.viewAllBadgeText}>Premium</Text>
+                </View>
 
-              <View style={styles.viewAllArrow}>
-                <Ionicons name="arrow-forward" size={17} color="#FFFFFF" />
-              </View>
+                <View style={styles.viewAllIcon}>
+                  <Ionicons name="library" size={28} color="#2563EB" />
+                </View>
+
+                <Text style={styles.viewAllText}>Explore Full</Text>
+                <Text style={styles.viewAllText}>Library</Text>
+
+                <View style={styles.viewAllArrow}>
+                  <Ionicons name="arrow-forward" size={17} color="#FFFFFF" />
+                </View>
+              </LinearGradient>
+
+              <LinearGradient
+                colors={["#F8FAFC", "#E2E8F0", "#CBD5E1"]}
+                style={styles.viewAllBottomPages}
+              />
+
+              <LinearGradient
+                colors={["#020617", "#0F172A", "#334155"]}
+                style={styles.viewAllSpine}
+              />
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>
@@ -139,101 +163,180 @@ const styles = StyleSheet.create({
   wrapper: {
     marginBottom: 24,
   },
+
   headerRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-topButton: {
-  paddingLeft: 5,
-  paddingRight: 8,
-  paddingVertical: 5,
-  borderRadius: 20,
-  backgroundColor: "#2563EB",
-  flexDirection: "row",
-  alignItems: "center",
-  gap: 5,
-  shadowColor: "#2563EB",
-  shadowOpacity: 0.2,
-  shadowRadius: 8,
-  shadowOffset: { width: 0, height: 4 },
-  elevation: 4,
-},
-topButtonIcon: {
-  width: 24,
-  height: 24,
-  borderRadius: 12,
-  backgroundColor: "#FFFFFF",
-  alignItems: "center",
-  justifyContent: "center",
-},
-topButtonText: {
-  color: "#FFFFFF",
-  fontSize: 10,
-  lineHeight: 12,
-  fontWeight: "900",
-},
-topButtonSub: {
-  marginTop: 0,
-  color: "#DBEAFE",
-  fontSize: 7,
-  lineHeight: 9,
-  fontWeight: "700",
-},
-  viewAllCard: {
-    width: 136,
-    height: 180,
+
+  topButton: {
+    paddingLeft: 5,
+    paddingRight: 8,
+    paddingVertical: 5,
     borderRadius: 20,
-    backgroundColor: "#EEF4FF",
+    backgroundColor: "#2563EB",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#BFDBFE",
+    gap: 5,
     shadowColor: "#2563EB",
-    shadowOpacity: 0.16,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
+
+  topButtonIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  topButtonText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: "900",
+  },
+
+  topButtonSub: {
+    color: "#DBEAFE",
+    fontSize: 7,
+    lineHeight: 9,
+    fontWeight: "700",
+  },
+
   scrollContent: {
-  paddingTop: 10,
-  paddingBottom: 10,
-  paddingRight: 16,
+    paddingTop: 12,
+    paddingBottom: 18,
+    paddingRight: 16,
+  },
+
+  viewAllAnimWrap: {
+    width: 122,
+    marginLeft: 12,
+    marginRight: 16,
+    paddingLeft: 10,
+    paddingBottom: 14,
+  },
+
+  viewAllBook: {
+    width: "100%",
+    aspectRatio: 9 / 16,
+    borderRadius: 6,
+    position: "relative",
+    transform: [{ perspective: 900 }, { rotateY: "-6deg" }],
+  },
+
+  viewAllCover: {
+  width: "100%",
+  height: "100%",
+  borderRadius: 8,
+  borderWidth: 1,
+  borderColor: "#60A5FA",
+
+  alignItems: "center",
+  justifyContent: "center",
+
+  paddingHorizontal: 12,
+  overflow: "hidden",
+
+  shadowColor: "#2563EB",
+  shadowOpacity: 0.25,
+  shadowRadius: 14,
+  shadowOffset: {
+    width: 0,
+    height: 8,
+  },
+  elevation: 8,
 },
-viewAllAnimWrap: {
-  marginLeft: 12,
-  marginRight: 16,
+
+  viewAllShadow: {
+    position: "absolute",
+    left: 5,
+    right: -10,
+    bottom: -13,
+    height: 18,
+    borderRadius: 999,
+    backgroundColor: "rgba(15,23,42,0.2)",
+  },
+
+  viewAllSpine: {
+    position: "absolute",
+    left: -9,
+    top: 7,
+    bottom: 8,
+    width: 12,
+    borderTopLeftRadius: 5,
+    borderBottomLeftRadius: 5,
+    zIndex: -2,
+  },
+
+  viewAllBottomPages: {
+    position: "absolute",
+    left: 5,
+    right: -5,
+    bottom: -7,
+    height: 8,
+    borderBottomLeftRadius: 5,
+    borderBottomRightRadius: 6,
+    zIndex: -1,
+  },
+
+  viewAllTopBadge: {
+  position: "absolute",
+  top: 12,
+  flexDirection: "row",
+  alignItems: "center",
+
+  paddingHorizontal: 10,
+  paddingVertical: 5,
+
+  borderRadius: 999,
+  backgroundColor: "#FFFFFF",
+
+  shadowColor: "#000",
+  shadowOpacity: 0.08,
+  shadowRadius: 4,
+  shadowOffset: {
+    width: 0,
+    height: 2,
+  },
 },
+
+  viewAllBadgeText: {
+    color: "#2563EB",
+    fontSize: 8,
+    fontWeight: "900",
+  },
+
   viewAllIcon: {
-    width: 52,
-    height: 52,
+    width: 38,
+    height: 38,
     borderRadius: 18,
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 12,
+    marginTop: 30,
+    marginBottom: 20,
   },
+
   viewAllText: {
     color: "#1E3A8A",
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: "900",
     textAlign: "center",
   },
-  viewAllSub: {
-    marginTop: 5,
-    color: "#64748B",
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: "700",
-    textAlign: "center",
-  },
+
   viewAllArrow: {
     marginTop: 12,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: "#2563EB",
     alignItems: "center",
     justifyContent: "center",

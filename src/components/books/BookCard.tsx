@@ -13,9 +13,6 @@ type Props = {
   large?: boolean;
 };
 
-const FALLBACK_IMAGE =
-  "https://dummyimage.com/300x450/e5e7eb/64748b.png&text=Book";
-
 export default function BookCard({
   book,
   onPress,
@@ -23,47 +20,58 @@ export default function BookCard({
 }: Props) {
   const imageUrl =
     book?.cover_image_url ||
-    book?.image_url ||
-    FALLBACK_IMAGE;
+    book?.image_url;
+
+  if (!imageUrl) return null;
 
   return (
     <Pressable
       onPress={onPress}
       disabled={!onPress}
       style={[
-        styles.wrap,
-        large ? styles.largeWrap : null,
+        styles.container,
+        large && styles.largeContainer,
       ]}
     >
       <View
         style={[
-          styles.shadowBook,
-          large ? styles.largeShadowBook : null,
+          styles.book,
+          large && styles.largeBook,
         ]}
       >
+        {/* Book Spine */}
         <LinearGradient
-          colors={["#1E293B", "#0F172A"]}
-          style={styles.bookSide}
+          colors={[
+            "#0F172A",
+            "#1E293B",
+            "#334155",
+          ]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.spine}
         />
 
+        {/* Cover */}
         <Image
           source={{ uri: imageUrl }}
-          style={[
-            styles.cover,
-            large ? styles.largeCover : null,
-          ]}
+          style={styles.cover}
           resizeMode="cover"
         />
 
+        {/* Gloss Reflection */}
         <LinearGradient
           colors={[
-            "rgba(255,255,255,0.45)",
+            "rgba(255,255,255,0.35)",
+            "rgba(255,255,255,0.12)",
             "transparent",
           ]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
           style={styles.gloss}
           pointerEvents="none"
         />
 
+        {/* Bottom Thickness */}
         <View style={styles.bottomDepth} />
       </View>
     </Pressable>
@@ -71,82 +79,87 @@ export default function BookCard({
 }
 
 const styles = StyleSheet.create({
-  wrap: {
+  container: {
     width: 120,
     marginRight: 18,
-    paddingLeft: 8,
-    paddingBottom: 12,
+    marginBottom: 12,
   },
 
-  largeWrap: {
+  largeContainer: {
     width: "47%",
     marginRight: 0,
-    marginBottom: 24,
+    marginBottom: 22,
   },
 
-  shadowBook: {
-    height: 176,
-    borderRadius: 14,
-    backgroundColor: "#CBD5E1",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
+  book: {
+    width: "100%",
+    aspectRatio: 9 / 16,
+
+    borderRadius: 8,
+    overflow: "visible",
+
+    shadowColor: "#000",
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
     shadowOffset: {
-      width: 6,
-      height: 10,
+      width: 4,
+      height: 8,
     },
     elevation: 8,
+
     transform: [
-      { perspective: 800 },
-      { rotateY: "-8deg" },
+      { perspective: 1000 },
+      { rotateY: "-6deg" },
     ],
   },
 
-  largeShadowBook: {
-    height: 230,
+  largeBook: {
+    aspectRatio: 9 / 16,
   },
 
   cover: {
     width: "100%",
-    height: 176,
-    borderRadius: 14,
+    height: "100%",
+    borderRadius: 8,
     backgroundColor: "#E5E7EB",
   },
 
-  largeCover: {
-    height: 230,
-  },
-
-  bookSide: {
+  spine: {
     position: "absolute",
-    left: -8,
-    top: 8,
-    width: 12,
-    height: "96%",
-    borderTopLeftRadius: 8,
-    borderBottomLeftRadius: 8,
+    left: -7,
+    top: 5,
+    bottom: 5,
+    width: 10,
+
+    borderTopLeftRadius: 5,
+    borderBottomLeftRadius: 5,
+
     zIndex: -1,
   },
 
   gloss: {
     position: "absolute",
-    top: 0,
     left: 10,
-    width: 28,
-    height: "100%",
-    opacity: 0.35,
-    borderRadius: 14,
+    top: 0,
+    bottom: 0,
+
+    width: 22,
+    borderRadius: 8,
   },
 
   bottomDepth: {
     position: "absolute",
-    bottom: -7,
-    left: 8,
-    right: -3,
-    height: 10,
+    left: 6,
+    right: -2,
+    bottom: -5,
+
+    height: 7,
+
     backgroundColor: "#94A3B8",
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+
     zIndex: -1,
   },
 });

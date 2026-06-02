@@ -32,8 +32,8 @@ const CARD = "#FFFFFF";
 const GREEN = "#16A34A";
 const ORANGE = "#F59E0B";
 
-const COVER_WIDTH = Math.min(width * 0.43, 180);
-const COVER_HEIGHT = COVER_WIDTH * 1.48;
+const COVER_WIDTH = Math.min(width * 0.38, 170);
+const COVER_HEIGHT = COVER_WIDTH * (16 / 9);
 
 export default function BookDetailScreen({ route, navigation }: any) {
   const { bookId } = route.params;
@@ -250,19 +250,6 @@ export default function BookDetailScreen({ route, navigation }: any) {
                 style={styles.cover}
                 resizeMode="cover"
               />
-
-              <LinearGradient
-                colors={[
-                  "rgba(255,255,255,0.68)",
-                  "rgba(255,255,255,0.16)",
-                  "transparent",
-                ]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.coverGloss}
-              />
-
-              <View style={styles.coverDarkEdge} />
             </View>
           </Animated.View>
         </LinearGradient>
@@ -608,29 +595,37 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   bookShadow: {
-    position: "absolute",
-    bottom: -18,
-    width: COVER_WIDTH * 1.55,
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: "rgba(15,23,42,0.14)",
-  },
+  position: "absolute",
+  bottom: -14,
+
+  width: COVER_WIDTH * 1.2,
+  height: 18,
+
+  borderRadius: 999,
+  backgroundColor: "rgba(15,23,42,0.20)",
+},
   bookWrap: {
-    width: COVER_WIDTH,
-    height: COVER_HEIGHT,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.25,
-    shadowRadius: 25,
-    shadowOffset: { width: 14, height: 18 },
-    elevation: 16,
-    transform: [
-      { perspective: 1000 },
-      { rotateY: "-10deg" },
-      { rotateZ: "-1.5deg" },
-    ],
+  width: COVER_WIDTH,
+  height: COVER_HEIGHT,
+  borderRadius: 8,
+
+  backgroundColor: "#FFFFFF",
+
+  shadowColor: "#020617",
+  shadowOpacity: 0.25,
+  shadowRadius: 12,
+  shadowOffset: {
+    width: 6,
+    height: 9,
   },
+
+  elevation: 10,
+
+  transform: [
+    { perspective: 900 },
+    { rotateY: "-6deg" },
+  ],
+},
   bookBack: {
     position: "absolute",
     left: 10,
@@ -642,66 +637,49 @@ const styles = StyleSheet.create({
     transform: [{ translateX: 13 }, { translateY: 9 }],
   },
   bookPagesRight: {
-    position: "absolute",
-    right: -12,
-    top: 12,
-    width: 18,
-    height: COVER_HEIGHT - 26,
-    backgroundColor: "#F8FAFC",
-    borderTopRightRadius: 10,
-    borderBottomRightRadius: 10,
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-  },
+  position: "absolute",
+  right: -5,
+  top: 5,
+  bottom: 3,
+  width: 6,
+
+  backgroundColor: "#F8FAFC",
+
+  borderTopRightRadius: 4,
+  borderBottomRightRadius: 4,
+},
   bookPagesBottom: {
-    position: "absolute",
-    left: 12,
-    right: -9,
-    bottom: -10,
-    height: 14,
-    backgroundColor: "#E2E8F0",
-    borderBottomLeftRadius: 14,
-    borderBottomRightRadius: 14,
-  },
+  position: "absolute",
+  left: 5,
+  right: -5,
+  bottom: -7,
+
+  height: 8,
+
+  backgroundColor: "#E2E8F0",
+
+  borderBottomLeftRadius: 5,
+  borderBottomRightRadius: 6,
+},
   bookSpine: {
-    position: "absolute",
-    left: -13,
-    top: 10,
-    width: 18,
-    height: COVER_HEIGHT - 18,
-    backgroundColor: "#94A3B8",
-    borderTopLeftRadius: 12,
-    borderBottomLeftRadius: 12,
-    zIndex: 3,
-  },
+  position: "absolute",
+  left: -9,
+  top: 7,
+  bottom: 8,
+  width: 12,
+
+  backgroundColor: "#334155",
+
+  borderTopLeftRadius: 5,
+  borderBottomLeftRadius: 5,
+
+  zIndex: 3,
+},
   cover: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 20,
-    backgroundColor: "#E2E8F0",
-    zIndex: 2,
-  },
-  coverGloss: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: "48%",
-    height: "100%",
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
-    zIndex: 4,
-  },
-  coverDarkEdge: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: 12,
-    height: "100%",
-    borderTopLeftRadius: 20,
-    borderBottomLeftRadius: 20,
-    backgroundColor: "rgba(15,23,42,0.16)",
-    zIndex: 5,
-  },
+  width: "100%",
+  height: "100%",
+  borderRadius: 8,
+},
   content: {
     paddingHorizontal: 20,
     paddingTop: 22,

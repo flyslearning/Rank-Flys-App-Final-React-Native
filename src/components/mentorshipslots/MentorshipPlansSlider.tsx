@@ -351,7 +351,7 @@ export default function MentorshipPlansSlider({ navigation }: any) {
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: 26,
+    marginBottom: 12,
   },
 
   headerRow: {

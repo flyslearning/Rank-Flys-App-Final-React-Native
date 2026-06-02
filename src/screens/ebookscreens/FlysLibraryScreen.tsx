@@ -165,13 +165,6 @@ export default function BooksLibraryScreen({ navigation }: any) {
             resizeMode="cover"
           />
 
-          <LinearGradient
-            colors={["rgba(255,255,255,0.55)", "rgba(255,255,255,0)"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.coverGloss}
-          />
-
           <View style={styles.bookBase} />
         </View>
       </Pressable>
@@ -595,59 +588,55 @@ const styles = StyleSheet.create({
     marginBottom: 26,
   },
 
-  coverWrap: {
-    width: ITEM_WIDTH,
-    height: ITEM_WIDTH * 1.5,
-    borderRadius: 15,
-    backgroundColor: "#E2E8F0",
-    shadowColor: "#0F172A",
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 5, height: 9 },
-    elevation: 7,
-    transform: [{ perspective: 900 }, { rotateY: "-5deg" }],
-  },
+coverWrap: {
+  width: ITEM_WIDTH,
+  aspectRatio: 9 / 16,
+  borderRadius: 6,
+  backgroundColor: "#E2E8F0",
+  overflow: "visible",
 
-  cover: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 15,
-    backgroundColor: "#E5E7EB",
+  shadowColor: "#020617",
+  shadowOpacity: 0.25,
+  shadowRadius: 12,
+  shadowOffset: {
+    width: 6,
+    height: 9,
   },
+  elevation: 9,
 
-  bookSpine: {
-    position: "absolute",
-    left: -6,
-    top: 7,
-    width: 9,
-    height: "94%",
-    borderTopLeftRadius: 7,
-    borderBottomLeftRadius: 7,
-    backgroundColor: "#1E293B",
-    zIndex: -1,
-  },
+  transform: [{ perspective: 900 }, { rotateY: "-6deg" }],
+},
 
-  coverGloss: {
-    position: "absolute",
-    top: 0,
-    left: 8,
-    width: 24,
-    height: "100%",
-    borderRadius: 15,
-    opacity: 0.4,
-  },
+cover: {
+  width: "100%",
+  height: "100%",
+  borderRadius: 6,
+  backgroundColor: "#E5E7EB",
+},
 
-  bookBase: {
-    position: "absolute",
-    bottom: -6,
-    left: 7,
-    right: -3,
-    height: 8,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
-    backgroundColor: "#94A3B8",
-    zIndex: -1,
-  },
+bookSpine: {
+  position: "absolute",
+  left: -9,
+  top: 7,
+  bottom: 8,
+  width: 12,
+  borderTopLeftRadius: 5,
+  borderBottomLeftRadius: 5,
+  backgroundColor: "#0F172A",
+  zIndex: -3,
+},
+
+bookBase: {
+  position: "absolute",
+  left: 5,
+  right: -5,
+  bottom: -7,
+  height: 8,
+  borderBottomLeftRadius: 5,
+  borderBottomRightRadius: 6,
+  backgroundColor: "#E2E8F0",
+  zIndex: -2,
+},
 
   footer: {
     paddingVertical: 18,

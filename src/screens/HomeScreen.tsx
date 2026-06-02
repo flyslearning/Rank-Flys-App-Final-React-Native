@@ -130,7 +130,7 @@ useEffect(() => {
           onPress={() => navigation.navigate("StudyMaterial")}
         >
           <LinearGradient
-            colors={["#FFFFFF", "#F8FAFC", "#FFFFFF"]}
+            colors={["#FFFFFF", "#FFFFFF", "#FFFFFF"]}
             style={styles.studyMaterialGradient}
           >
             <View style={styles.blurCircle1} />
@@ -240,11 +240,11 @@ useEffect(() => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFFFFF",
   },
 
   fixedHeader: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#FFFFFF",
     zIndex: 999,
     elevation: 6,
     shadowColor: "#0F172A",
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 studyMaterialCard: {
-  marginBottom: 24,
+  marginBottom: 8,
   borderRadius: 34,
   shadowColor: "#2563EB",
   shadowOpacity: 0.13,
@@ -567,7 +567,7 @@ bottomPills: {
 pill: {
   flexDirection: "row",
   alignItems: "center",
-  backgroundColor: "#F8FAFC",
+  backgroundColor: "#FFFFFF",
   borderWidth: 1,
   borderColor: "#E2E8F0",
   paddingHorizontal: 10,
@@ -587,7 +587,7 @@ arrowButton: {
   width: 40,
   height: 40,
   borderRadius: 16,
-  backgroundColor: "#F8FAFC",
+  backgroundColor: "#FFFFFF",
   borderWidth: 1,
   borderColor: "#E2E8F0",
   alignItems: "center",

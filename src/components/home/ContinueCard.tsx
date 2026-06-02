@@ -15,7 +15,7 @@ import {
 const { width } = Dimensions.get("window");
 
 const SLIDER_WIDTH = width - 40;
-const SLIDER_HEIGHT = SLIDER_WIDTH * 0.5625;
+const SLIDER_HEIGHT = SLIDER_WIDTH * (720 / 1920);
 
 type Props = {
   onPress?: () => void;
@@ -29,6 +29,7 @@ const images = [
   require("../../assets/Ads/5.png"),
   require("../../assets/Ads/6.png"),
   require("../../assets/Ads/7.png"),
+  require("../../assets/Ads/8.png"),
 ];
 
 const sliderImages = [images[images.length - 1], ...images, images[0]];
@@ -38,16 +39,10 @@ export default function ContinueLearningCard({ onPress }: Props) {
   const [activeIndex, setActiveIndex] = useState(0);
   const currentIndexRef = useRef(1);
 
-  const safeScrollToIndex = (
-    index: number,
-    animated: boolean
-  ) => {
+  const safeScrollToIndex = (index: number, animated: boolean) => {
     if (!sliderImages.length) return;
 
-    const safeIndex = Math.min(
-      Math.max(index, 0),
-      sliderImages.length - 1
-    );
+    const safeIndex = Math.min(Math.max(index, 0), sliderImages.length - 1);
 
     try {
       flatListRef.current?.scrollToIndex({
@@ -71,10 +66,7 @@ export default function ContinueLearningCard({ onPress }: Props) {
 
       safeScrollToIndex(nextIndex, true);
 
-      currentIndexRef.current = Math.min(
-        nextIndex,
-        sliderImages.length - 1
-      );
+      currentIndexRef.current = Math.min(nextIndex, sliderImages.length - 1);
     }, 3000);
 
     return () => clearInterval(interval);
@@ -83,9 +75,7 @@ export default function ContinueLearningCard({ onPress }: Props) {
   const handleScrollEnd = (
     event: NativeSyntheticEvent<NativeScrollEvent>
   ) => {
-    let index = Math.round(
-      event.nativeEvent.contentOffset.x / SLIDER_WIDTH
-    );
+    let index = Math.round(event.nativeEvent.contentOffset.x / SLIDER_WIDTH);
 
     if (index === 0) {
       index = images.length;
@@ -99,10 +89,7 @@ export default function ContinueLearningCard({ onPress }: Props) {
 
     currentIndexRef.current = index;
 
-    const realIndex = Math.max(
-      0,
-      Math.min(index - 1, images.length - 1)
-    );
+    const realIndex = Math.max(0, Math.min(index - 1, images.length - 1));
 
     setActiveIndex(realIndex);
   };
@@ -144,10 +131,7 @@ export default function ContinueLearningCard({ onPress }: Props) {
         {images.map((_, index) => (
           <View
             key={index}
-            style={[
-              styles.dot,
-              activeIndex === index && styles.activeDot,
-            ]}
+            style={[styles.dot, activeIndex === index && styles.activeDot]}
           />
         ))}
       </View>
@@ -162,7 +146,7 @@ const styles = StyleSheet.create({
   slide: {
     width: SLIDER_WIDTH,
     height: SLIDER_HEIGHT,
-    borderRadius: 26,
+    borderRadius: 14,
     overflow: "hidden",
     backgroundColor: "#E5E7EB",
   },

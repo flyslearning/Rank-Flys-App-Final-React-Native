@@ -114,7 +114,12 @@ function BottomTabs() {
         options={{
           headerShown: false,
           tabBarLabel: "Connect",
-          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          tabBarBadge:
+          unreadCount > 99
+            ? "99+"
+            : unreadCount > 0
+            ? unreadCount
+            : undefined,
           tabBarBadgeStyle: {
             backgroundColor: "red",
             color: "white",
