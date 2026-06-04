@@ -10,9 +10,9 @@ import {
   TextInput,
   StatusBar,
   Platform,
-  Image,
   RefreshControl,
 } from "react-native";
+import CachedRemoteImage from "../../components/CachedRemoteImage";
 import { Ionicons } from "@expo/vector-icons";
 import CustomAlert from "../extrascreens/CustomAlert";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -258,7 +258,7 @@ export default function EbookSeriesScreen({ navigation }: Props) {
       >
         <View style={styles.imageWrap}>
           {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.seriesImage} />
+            <CachedRemoteImage uri={imageUrl} style={styles.seriesImage} />
           ) : (
             <View style={styles.placeholderImage}>
               <Ionicons
@@ -517,7 +517,6 @@ const styles = StyleSheet.create({
   seriesImage: {
     width: "100%",
     height: "100%",
-    resizeMode: "cover",
   },
   placeholderImage: {
     flex: 1,

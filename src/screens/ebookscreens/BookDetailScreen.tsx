@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
-  Image,
   StyleSheet,
   ScrollView,
   Pressable,
@@ -12,6 +11,7 @@ import {
   Animated,
   StatusBar,
 } from "react-native";
+import CachedRemoteImage from "../../components/CachedRemoteImage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -245,10 +245,9 @@ export default function BookDetailScreen({ route, navigation }: any) {
               <View style={styles.bookPagesBottom} />
               <View style={styles.bookSpine} />
 
-              <Image
-                source={{ uri: book.cover_image_url }}
+              <CachedRemoteImage
+                uri={book.cover_image_url}
                 style={styles.cover}
-                resizeMode="cover"
               />
             </View>
           </Animated.View>

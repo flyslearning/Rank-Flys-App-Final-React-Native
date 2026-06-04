@@ -1,10 +1,10 @@
 import React from "react";
 import {
-  Image,
   Pressable,
   StyleSheet,
   View,
 } from "react-native";
+import CachedRemoteImage from "../CachedRemoteImage";
 import { LinearGradient } from "expo-linear-gradient";
 
 type Props = {
@@ -52,10 +52,9 @@ export default function BookCard({
         />
 
         {/* Cover */}
-        <Image
-          source={{ uri: imageUrl }}
+        <CachedRemoteImage
+          uri={imageUrl}
           style={styles.cover}
-          resizeMode="cover"
         />
 
         {/* Gloss Reflection */}

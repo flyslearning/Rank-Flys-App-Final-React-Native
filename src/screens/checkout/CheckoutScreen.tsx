@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   Pressable,
   TextInput,
   Alert,
@@ -16,6 +15,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import CachedRemoteImage from "../../components/CachedRemoteImage";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import RazorpayCheckout from "react-native-razorpay";
@@ -321,7 +321,10 @@ export default function CheckoutScreen({ route, navigation }: any) {
           >
             <View style={styles.heroCard}>
               {imageUrl ? (
-                <Image source={{ uri: imageUrl }} style={styles.heroImage} />
+                <CachedRemoteImage
+                    uri={imageUrl}
+                    style={styles.heroImage}
+                  />
               ) : (
                 <View style={styles.heroPlaceholder}>
                   <Ionicons name="school-outline" size={54} color={BLUE} />

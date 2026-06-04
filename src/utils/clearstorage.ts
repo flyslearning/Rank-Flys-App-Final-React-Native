@@ -1,5 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { clearAllCachedPdfs } from "./pdfCache";
+import { clearAllCachedImages } from "./imageCache";
+import { clearAllCachedBooks } from "./bookCache";
+import { db } from "../db/database";
 
 
 // ❌ Important data — never clear automatically
@@ -47,6 +50,8 @@ export const clearTemporaryAppData = async () => {
     }
 
     await clearAllCachedPdfs();
+    await clearAllCachedBooks();
+    await clearAllCachedImages();
 
     console.log("Temporary app data cleared");
   } catch (error) {
@@ -70,6 +75,7 @@ export const clearEverythingExceptProtected = async () => {
     }
 
     await clearAllCachedPdfs();
+    await clearAllCachedBooks();
 
     console.log("All non-protected data cleared");
   } catch (error) {
@@ -88,8 +94,6 @@ export const printAllStorageKeys = async () => {
     console.log("Print keys error:", error);
   }
 };
-
-import { db } from "../db/database";
 
 export const clearFullLocalDatabase = async () => {
   try {
@@ -141,7 +145,8 @@ export const clearDataOnLogout = async () => {
     }
 
     await clearAllCachedPdfs();
-
+    await clearAllCachedBooks();
+    await clearAllCachedImages();
     await clearFullLocalDatabase();
 
     console.log("Logout clear complete");

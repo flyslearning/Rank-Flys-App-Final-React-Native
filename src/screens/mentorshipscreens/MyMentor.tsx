@@ -3,7 +3,6 @@ import {
   View,
   Text,
   ScrollView,
-  Image,
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
@@ -15,6 +14,7 @@ import {
   Platform,
   Linking,
 } from "react-native";
+import CachedRemoteImage from "../../components/CachedRemoteImage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -675,7 +675,10 @@ export default function MyMentor() {
               <FadeCard style={styles.heroCard}>
                 <View style={styles.imageWrap}>
                   {mentorship?.image_url ? (
-                    <Image source={{ uri: mentorship.image_url }} style={styles.heroImage} />
+                    <CachedRemoteImage
+                        uri={mentorship.image_url}
+                        style={styles.heroImage}
+                      />
                   ) : (
                     <View style={styles.placeholder}>
                       <Ionicons name="school-outline" size={54} color={PURPLE} />
@@ -1057,7 +1060,10 @@ export default function MyMentor() {
                   <FadeCard key={item.id} delay={index * 25}>
                     <View style={[styles.announcementCard, item.is_pinned && styles.pinnedCard]}>
                       {item.image_url ? (
-                        <Image source={{ uri: item.image_url }} style={styles.announcementImage} resizeMode="cover" />
+                        <CachedRemoteImage
+                            uri={item.image_url}
+                            style={styles.announcementImage}
+                          />
                       ) : null}
 
                       <View style={styles.announcementBody}>

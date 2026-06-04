@@ -8,12 +8,12 @@ import {
   ScrollView,
   ActivityIndicator,
   Modal,
-  Image,
   StatusBar,
   SafeAreaView,
   BackHandler,
   useWindowDimensions,
 } from "react-native";
+import CachedRemoteImage from "../../components/CachedRemoteImage";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, Question } from "../../types";
@@ -623,10 +623,9 @@ function QuestionCard({
           style={styles.questionImageWrapper}
           onPress={() => onImagePress(imageUrl)}
         >
-          <Image
-            source={{ uri: imageUrl }}
+          <CachedRemoteImage
+            uri={imageUrl}
             style={styles.questionImage}
-            resizeMode="cover"
           />
         </TouchableOpacity>
       )}

@@ -10,8 +10,8 @@ import {
   TextInput,
   StatusBar,
   Platform,
-  Image,
 } from "react-native";
+import CachedRemoteImage from "../../components/CachedRemoteImage";
 import CustomAlert from "../extrascreens/CustomAlert";
 import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -226,7 +226,7 @@ export default function TestSeriesScreen({ navigation }: Props) {
       >
         <View style={styles.imageWrap}>
           {imageUrl ? (
-            <Image source={{ uri: imageUrl }} style={styles.seriesImage} />
+            <CachedRemoteImage uri={imageUrl} style={styles.seriesImage} />
           ) : (
             <View style={styles.placeholderImage}>
               <Ionicons name="school-outline" size={46} color="#2563eb" />
@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#dbeafe",
     position: "relative",
   },
-  seriesImage: { width: "100%", height: "100%", resizeMode: "cover" },
+  seriesImage: { width: "100%", height: "100%" },
   placeholderImage: {
     flex: 1,
     justifyContent: "center",

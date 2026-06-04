@@ -3,7 +3,6 @@ import {
   View,
   Text,
   FlatList,
-  Image,
   TouchableOpacity,
   ActivityIndicator,
   StyleSheet,
@@ -14,6 +13,7 @@ import {
   Platform,
   RefreshControl,
 } from "react-native";
+import CachedRemoteImage from "../../components/CachedRemoteImage";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
@@ -391,7 +391,10 @@ export default function MentorshipScreens() {
         >
           <View style={styles.cardHero}>
             {item?.image_url ? (
-              <Image source={{ uri: item.image_url }} style={styles.cardImage} />
+              <CachedRemoteImage
+                uri={item.image_url}
+                style={styles.cardImage}
+              />
             ) : (
               <View style={styles.cardPlaceholder}>
                 <Ionicons name="school-outline" size={56} color={PURPLE} />

@@ -31,6 +31,7 @@
     "@react-navigation/native": "^7.2.2",
     "@react-navigation/native-stack": "^7.14.12",
     "axios": "^1.16.0",
+    "crypto-js": "^4.2.0",
     "expo": "~55.0.26",
     "expo-application": "~55.0.15",
     "expo-build-properties": "~55.0.14",
@@ -39,6 +40,7 @@
     "expo-dev-client": "~55.0.35",
     "expo-file-system": "~55.0.22",
     "expo-font": "~55.0.8",
+    "expo-image": "~55.0.11",
     "expo-linear-gradient": "~55.0.14",
     "expo-notifications": "~55.0.23",
     "expo-screen-capture": "~55.0.14",
@@ -66,6 +68,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@types/crypto-js": "^4.2.2",
     "@types/react": "~19.2.0",
     "typescript": "~5.9.2"
   }

@@ -19,6 +19,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
 import ImageViewer from "react-native-image-zoom-viewer";
+import { getBookCacheKey } from "../../utils/secureBookKey";
 import { EbookAPI } from "../../api/ebook.api";
 import { EbookDb } from "../../db/ebookDb";
 import BookPaywall from "../../components/books/BookPaywall";
@@ -44,11 +45,40 @@ const getStableImageKey = (page: any) => {
 
 const getLocalPagePath = (bookId: string, pageNo: number, imageKey: string) => {
   const keyHash = simpleHash(imageKey);
-  return `${FileSystem.documentDirectory}books/${bookId}/page-${pageNo}-${keyHash}.webp`;
+  return `${FileSystem.documentDirectory}books/${bookId}/page-${pageNo}-${keyHash}.enc`;
 };
 
 const getApiMessage = (error: any) =>
   error?.response?.data || error?.response?.data?.message || error?.message || "";
+
+const xorEncryptBase64 = (base64: string, key: string) => {
+  let output = "";
+
+  for (let i = 0; i < base64.length; i++) {
+    output += String.fromCharCode(
+      base64.charCodeAt(i) ^ key.charCodeAt(i % key.length)
+    );
+  }
+
+  return btoa(output);
+};
+
+const xorDecryptBase64 = (encrypted: string, key: string) => {
+  const input = atob(encrypted);
+  let output = "";
+
+  for (let i = 0; i < input.length; i++) {
+    output += String.fromCharCode(
+      input.charCodeAt(i) ^ key.charCodeAt(i % key.length)
+    );
+  }
+
+  return output;
+};
+
+const getTempDecryptedPagePath = (bookId: string, pageNo: number) => {
+  return `${FileSystem.cacheDirectory}book-${bookId}-page-${pageNo}.webp`;
+};
 
 export default function BookReaderScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -117,49 +147,97 @@ export default function BookReaderScreen({ route, navigation }: any) {
   }, [bookId]);
 
   const resolvePageImage = async (page: any) => {
-    if (page.locked || !page.image_url) return page;
+  if (page.locked || !page.image_url) return page;
 
-    const imageKey = getStableImageKey(page);
+  const imageKey = getStableImageKey(page);
 
-    try {
-      const folder = `${FileSystem.documentDirectory}books/${bookId}/`;
-      const folderInfo = await FileSystem.getInfoAsync(folder);
+  try {
+    const folder = `${FileSystem.documentDirectory}books/${bookId}/`;
+    const folderInfo = await FileSystem.getInfoAsync(folder);
 
-      if (!folderInfo.exists) {
-        await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
-      }
-
-      const localUri = getLocalPagePath(bookId, page.page_no, imageKey);
-      const localInfo = await FileSystem.getInfoAsync(localUri);
-
-      if (localInfo.exists) {
-        return {
-          ...page,
-          image_url: localUri,
-          local_uri: localUri,
-          image_key: imageKey,
-          remote_key: imageKey,
-        };
-      }
-
-      const downloaded = await FileSystem.downloadAsync(page.image_url, localUri);
-
-      return {
-        ...page,
-        image_url: downloaded.uri,
-        local_uri: downloaded.uri,
-        image_key: imageKey,
-        remote_key: imageKey,
-      };
-    } catch (error) {
-      console.log("Image cache failed, using remote image");
-      return {
-        ...page,
-        image_key: imageKey,
-        remote_key: imageKey,
-      };
+    if (!folderInfo.exists) {
+      await FileSystem.makeDirectoryAsync(folder, { intermediates: true });
     }
-  };
+
+    const encryptedPath = getLocalPagePath(bookId, page.page_no, imageKey);
+    const encryptedInfo = await FileSystem.getInfoAsync(encryptedPath);
+
+    const tempImageUri = getTempDecryptedPagePath(bookId, page.page_no);
+
+    if (encryptedInfo.exists) {
+  try {
+    console.log("BOOK PAGE LOCAL ENCRYPTED HIT:", page.page_no);
+
+    const encryptedText = await FileSystem.readAsStringAsync(encryptedPath);
+    const key = await getBookCacheKey();
+    const decryptedBase64 = xorDecryptBase64(encryptedText, key);
+
+    if (!decryptedBase64 || decryptedBase64.length < 100) {
+      throw new Error("Invalid decrypted base64");
+    }
+
+    await FileSystem.writeAsStringAsync(tempImageUri, decryptedBase64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    return {
+      ...page,
+      image_url: tempImageUri,
+      local_uri: encryptedPath,
+      image_key: imageKey,
+      remote_key: imageKey,
+      encrypted: true,
+    };
+  } catch (error) {
+    console.log("BAD ENCRYPTED CACHE, DELETING:", page.page_no);
+
+    await FileSystem.deleteAsync(encryptedPath, { idempotent: true });
+  }
+}
+
+    console.log("BOOK PAGE DOWNLOAD FROM CLOUD:", page.page_no);
+
+    const tempDownloadUri =
+      `${FileSystem.cacheDirectory}download-${bookId}-${page.page_no}.webp`;
+
+    const downloaded = await FileSystem.downloadAsync(
+      page.image_url,
+      tempDownloadUri
+    );
+
+    const base64 = await FileSystem.readAsStringAsync(downloaded.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    const key = await getBookCacheKey();
+    const encryptedText = xorEncryptBase64(base64, key);
+
+    await FileSystem.writeAsStringAsync(encryptedPath, encryptedText);
+
+    await FileSystem.writeAsStringAsync(tempImageUri, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    await FileSystem.deleteAsync(tempDownloadUri, { idempotent: true });
+
+    return {
+      ...page,
+      image_url: tempImageUri,
+      local_uri: encryptedPath,
+      image_key: imageKey,
+      remote_key: imageKey,
+      encrypted: true,
+    };
+  } catch (error) {
+    console.log("Encrypted image cache failed:", error);
+
+    return {
+      ...page,
+      image_key: imageKey,
+      remote_key: imageKey,
+    };
+  }
+};
 
   const setFallbackPage = useCallback(() => {
     if (!coverImageUrl) return;
@@ -220,9 +298,19 @@ export default function BookReaderScreen({ route, navigation }: any) {
         }, 300);
       }
 
-        if (localList.length) {
-          EbookDb.saveBookPages?.(bookId, localList);
-        }
+        if (list.length) {
+        const dbList = list.map((p: any) => {
+          const imageKey = getStableImageKey(p);
+
+          return {
+            ...p,
+            image_key: imageKey,
+            remote_key: imageKey,
+          };
+        });
+
+        EbookDb.saveBookPages?.(bookId, dbList);
+      }
 
         setNextFrom(data?.next_from || null);
       } catch (error: any) {
@@ -294,7 +382,17 @@ export default function BookReaderScreen({ route, navigation }: any) {
         });
       }, 100);
 
-      EbookDb.saveBookPages?.(bookId, localList);
+      const dbList = list.map((p: any) => {
+  const imageKey = getStableImageKey(p);
+
+  return {
+    ...p,
+    image_key: imageKey,
+    remote_key: imageKey,
+  };
+});
+
+EbookDb.saveBookPages?.(bookId, dbList);
     } catch (error: any) {
       console.log("Previous pages load failed:", getApiMessage(error));
     } finally {
