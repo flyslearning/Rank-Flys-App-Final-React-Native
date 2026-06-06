@@ -1,16 +1,19 @@
 export type RootStackParamList = {
 
   SendOtp: undefined;
-  VerifyOtp: { mobile: string };
+  VerifyOtp: { email: string };
    MainTabs: undefined;
   Onboarding: undefined;
   Home: undefined;
   TestSeries: undefined;
   Tests: { seriesId: string };
-  TestAttempt: { 
+  TestAttempt: {
   testId: string;
   seriesId: string;
-   };
+  duration_minutes?: number;
+  durationMinutes?: number;
+  duration?: number;
+  };
   Attempts: { testId: string };
   Result: { attemptId: string };
    EbookSeries: undefined;

@@ -3,7 +3,8 @@ import axios, {
   AxiosInstance,
   InternalAxiosRequestConfig,
 } from "axios";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import axiosRetry from "axios-retry";
+import { storage } from "../utils/storage";
 import { useAuthStore } from "../store/auth.store";
 
 export const AUTH_BASE_URL = process.env.EXPO_PUBLIC_AUTH_API;
@@ -14,38 +15,9 @@ export const TOOL_BASE_URL = process.env.EXPO_PUBLIC_TOOL_API;
 export const MENTORSHIP_BASE_URL = process.env.EXPO_PUBLIC_MENTORSHIP_API;
 export const CHAT_BASE_URL = process.env.EXPO_PUBLIC_CHAT_API;
 
-export const storage = {
-  async get<T>(key: string): Promise<T | null> {
-    const value = await AsyncStorage.getItem(key);
-    if (value === null) return null;
-
-    try {
-      return JSON.parse(value) as T;
-    } catch {
-      return value as T;
-    }
-  },
-
-  async set<T>(key: string, value: T) {
-    if (typeof value === "string") {
-      await AsyncStorage.setItem(key, value);
-    } else {
-      await AsyncStorage.setItem(key, JSON.stringify(value));
-    }
-  },
-
-  async remove(key: string) {
-    await AsyncStorage.removeItem(key);
-  },
-
-  async clear() {
-    console.warn("storage.clear() disabled to protect intro_seen");
-  },
-};
-
 export const authClient = axios.create({
   baseURL: AUTH_BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -53,7 +25,7 @@ export const authClient = axios.create({
 
 export const toolClient = axios.create({
   baseURL: TOOL_BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -61,7 +33,7 @@ export const toolClient = axios.create({
 
 export const mentorshipClient = axios.create({
   baseURL: MENTORSHIP_BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -69,7 +41,7 @@ export const mentorshipClient = axios.create({
 
 export const testClient = axios.create({
   baseURL: TEST_BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -77,7 +49,7 @@ export const testClient = axios.create({
 
 export const ebookClient = axios.create({
   baseURL: EBOOK_BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -85,7 +57,7 @@ export const ebookClient = axios.create({
 
 export const paymentClient = axios.create({
   baseURL: PAYMENT_BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -93,7 +65,7 @@ export const paymentClient = axios.create({
 
 export const chatClient = axios.create({
   baseURL: CHAT_BASE_URL,
-  timeout: 15000,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -107,6 +79,27 @@ const refreshClient = axios.create({
     "Content-Type": "application/json",
   },
 });
+
+const setupRetry = (client: AxiosInstance) => {
+  axiosRetry(client, {
+    retries: 2,
+    retryDelay: axiosRetry.exponentialDelay,
+    retryCondition: (error) => {
+      const method = error.config?.method?.toLowerCase();
+      const url = error.config?.url || "";
+
+      if (method === "post" && url.includes("/auth/send-otp") && !error.response) {
+        return true;
+      }
+
+      return (
+        axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+        error.code === "ECONNABORTED" ||
+        error.message?.includes("Network Error")
+      );
+    },
+  });
+};
 
 type RetryConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
@@ -184,29 +177,31 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
   isRefreshing = true;
 
   try {
-    const { refreshToken, setTokens } = useAuthStore.getState();
+    const latestRefreshToken =
+  useAuthStore.getState().refreshToken ||
+  (await storage.get<string>("refresh_token"));
 
-    if (!refreshToken) {
+    if (!latestRefreshToken) {
+      await useAuthStore.getState().clearTokens();
       return Promise.reject(error);
     }
 
     const response = await refreshClient.post("/auth/refresh", {
-      refresh_token: refreshToken,
+      refresh_token: latestRefreshToken,
     });
 
-    const newAccessToken =
-    response.data.access_token || response.data.accessToken;
+        const newAccessToken =
+        response.data.access_token || response.data.accessToken;
 
-  const newRefreshToken =
-    response.data.refresh_token ||
-    response.data.refreshToken ||
-    refreshToken;
+      const newRefreshToken =
+      response.data.refresh_token || response.data.refreshToken;
 
-  if (!newAccessToken) {
-    return Promise.reject(error);
-  }
+      if (!newAccessToken || !newRefreshToken) {
+      await useAuthStore.getState().clearTokens();
+      return Promise.reject(error);
+      }
 
-    await setTokens(newAccessToken, newRefreshToken);
+    await useAuthStore.getState().setTokens(newAccessToken, newRefreshToken);
 
     setDefaultAuthorizationHeader(newAccessToken);
 
@@ -218,16 +213,22 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
     const client = originalRequest._client || authClient;
 
     return client(originalRequest);
-  } catch (refreshError) {
-  processQueue(refreshError, null);
+    } catch (refreshError: any) {
+      processQueue(refreshError, null);
 
-  console.log("REFRESH TOKEN ERROR", refreshError);
+      const status = refreshError?.response?.status;
 
-  return Promise.reject(refreshError);
-  } finally {
-    isRefreshing = false;
-  }
-  };
+      if (status === 401 || status === 403) {
+        await useAuthStore.getState().clearTokens();
+      }
+
+      console.log("REFRESH TOKEN ERROR", refreshError);
+
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
+    };
 
 export const setAuthToken = async (
   accessToken: string,
@@ -244,7 +245,13 @@ const attachRefreshInterceptor = (client: AxiosInstance) => {
   client.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
-      const status = error.response?.status;
+    const url = error.config?.url || "";
+
+    if (url.includes("/auth/refresh")) {
+      return Promise.reject(error);
+    }
+
+    const status = error.response?.status;
       const message = JSON.stringify(error.response?.data || "").toLowerCase();
 
       if (
@@ -267,6 +274,13 @@ const attachRefreshInterceptor = (client: AxiosInstance) => {
     }
   );
 };
+setupRetry(authClient);
+setupRetry(testClient);
+setupRetry(ebookClient);
+setupRetry(paymentClient);
+setupRetry(toolClient);
+setupRetry(mentorshipClient);
+setupRetry(chatClient);
 
 authClient.interceptors.request.use((config) =>
   attachToken(config, authClient)

@@ -127,6 +127,12 @@ function extractOnlineUsers(data: any): OnlineUser[] {
   if (Array.isArray(data?.online?.users)) return data.online.users;
   return [];
 }
+function extractMessages(data: any): Msg[] {
+  if (Array.isArray(data?.messages)) return data.messages;
+  if (Array.isArray(data?.data?.messages)) return data.data.messages;
+  if (Array.isArray(data)) return data;
+  return [];
+}
 
 function onlineUserName(u: OnlineUser) {
   return u.user_name || u.full_name || u.name || "Student";
@@ -263,11 +269,11 @@ export default function GroupChatScreen() {
   }, [goalClassID]);
 
   const fetchMessages = useCallback(
-    async (before?: string) => {
-      const res = await ChatAPI.messages(goalClassID, before);
-      return Array.isArray(res.data?.messages) ? res.data.messages : [];
-    },
-    [goalClassID]
+  async (before?: string) => {
+    const res = await ChatAPI.messages(goalClassID, before);
+    return extractMessages(res.data);
+  },
+  [goalClassID]
   );
 
   const fetchOnline = useCallback(async () => {
@@ -575,6 +581,11 @@ const markRead = useCallback(async () => {
   );
 
   const openChat = useCallback(async () => {
+    if (initialLoaded.current) {
+      await connectSocket();
+      fetchOnline().catch(() => {});
+      return;
+    }
     if (!token || !goalClassID) {
       setLoading(false);
       setStatus("offline");
@@ -596,9 +607,14 @@ const markRead = useCallback(async () => {
 
       if (!mounted.current) return;
 
-      setMessages(normalize(history));
+      setMessages((prev) => {
+        if (!history.length && prev.length) return prev;
+        return normalize(history);
+      });
       setUnreadCount(0);
-      setHasMoreOlder(history.length >= 20);
+      if (history.length) {
+        setHasMoreOlder(history.length >= 20);
+      }
       initialLoaded.current = true;
 
       await connectSocket();
@@ -821,14 +837,15 @@ const scrollToMessage = useCallback(
     });
 
     if (!ok) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.temp_id === tempID ? { ...m, pending: false, failed: true } : m
-        )
+    setMessages((prev) =>
+    prev.map((m) =>
+      m.temp_id === tempID ? { ...m, pending: false, failed: true } : m
+    )
       );
       return;
-      setReplyTo(null);
     }
+
+    setReplyTo(null);
 
     setTimeout(() => {
       setMessages((prev) =>
@@ -837,7 +854,7 @@ const scrollToMessage = useCallback(
         )
       );
     }, 1800);
-  }, [input, status, sendWs, myUserID, myName, myRole]);
+  }, [input, status, sendWs, myUserID, myName, myRole, replyTo]);
 
   const handleCreatePoll = useCallback(async () => {
   const question = pollQuestion.trim();

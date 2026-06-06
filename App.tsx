@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, ActivityIndicator, Platform } from "react-native";
+import { Platform } from "react-native";
 import remoteConfig from "@react-native-firebase/remote-config";
 import * as Application from "expo-application";
 import ForceUpdateScreen from "./src/screens/extrascreens/ForceUpdateScreen";
@@ -75,12 +75,25 @@ export default function App() {
         // Ye database.ts me ebook + test sab tables create kar raha hai
         initDatabase();
 
-        await Promise.all([loadTokens(), loadApp()]);
-        await checkForceUpdate();
-      } catch (error) {
-        console.log("App Init Error:", error);
+        await Promise.race([
+          Promise.all([loadTokens(), loadApp()]),
+          new Promise((resolve) => setTimeout(resolve, 3000)),
+        ]);
+
+        await Promise.race([
+          checkForceUpdate(),
+          new Promise((resolve) => setTimeout(resolve, 5000)),
+        ]);
+           } catch (error) {
+            console.log("App Init Error:", error);
+            setCheckingUpdate(false);
+            useAuthStore.setState({ isReady: true });
+            useAppStore.setState({ isAppReady: true });
+          } finally {
+        useAuthStore.setState({ isReady: true });
+        useAppStore.setState({ isAppReady: true });
         setCheckingUpdate(false);
-      } finally {
+
         timer = setTimeout(() => {
           if (isMounted) {
             setShowCustomSplash(false);
@@ -101,18 +114,7 @@ export default function App() {
   }, [loadTokens, loadApp]);
 
   if (!fontsLoaded || !authReady || !appReady || checkingUpdate) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "#fff",
-        }}
-      >
-        <ActivityIndicator size="large" color="#2563eb" />
-      </View>
-    );
+  return <SplashScreen />;
   }
 
   if (showCustomSplash) {

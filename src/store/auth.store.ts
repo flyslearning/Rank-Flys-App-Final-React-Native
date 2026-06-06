@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { storage } from "../utils/storage";
-import { clearAllCachedPdfs } from "../utils/pdfCache";
 import { AUTH_BASE_URL } from "../api/client";
 import { clearDataOnLogout } from "../utils/clearstorage";
 
@@ -28,8 +27,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
 
   setTokens: async (accessToken, refreshToken) => {
-    await storage.set("access_token", accessToken);
-    await storage.set("refresh_token", refreshToken);
+    await Promise.all([
+    storage.set("access_token", accessToken),
+    storage.set("refresh_token", refreshToken),
+  ]);
 
     set({
       accessToken,
@@ -46,7 +47,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       ...user,
     };
 
-    storage.set("user", mergedUser);
+    storage.set("user", mergedUser).catch(console.log);
 
     return {
       user: mergedUser,
@@ -135,18 +136,38 @@ export const useAuthStore = create<AuthState>((set) => ({
       const data = await res.json();
 
       if (!res.ok) {
-        return null;
-      }
+      await storage.remove("access_token");
+      await storage.remove("refresh_token");
+
+      set({
+        accessToken: null,
+        refreshToken: null,
+        isAuthenticated: false,
+      });
+
+      return null;
+    }
 
       const newAccessToken = data.access_token || data.accessToken;
       const newRefreshToken = data.refresh_token || data.refreshToken;
 
       if (!newAccessToken || !newRefreshToken) {
-        return null;
-      }
+      await storage.remove("access_token");
+      await storage.remove("refresh_token");
 
-      await storage.set("access_token", newAccessToken);
-      await storage.set("refresh_token", newRefreshToken);
+      set({
+        accessToken: null,
+        refreshToken: null,
+        isAuthenticated: false,
+      });
+
+      return null;
+    }
+
+      await Promise.all([
+      storage.set("access_token", newAccessToken),
+      storage.set("refresh_token", newRefreshToken),
+    ]);
 
       set({
         accessToken: newAccessToken,

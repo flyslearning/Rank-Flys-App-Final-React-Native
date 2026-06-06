@@ -20,7 +20,14 @@ export default function SplashScreen() {
 
   useEffect(() => {
   const initSplash = async () => {
-    await checkAndMigrateAppData();
+    try {
+    await Promise.race([
+    checkAndMigrateAppData(),
+    new Promise((resolve) => setTimeout(resolve, 3000)),
+      ]);
+    } catch (error) {
+      console.log("Migration error:", error);
+    }
 
     Animated.parallel([
       Animated.timing(fadeAnim, {
