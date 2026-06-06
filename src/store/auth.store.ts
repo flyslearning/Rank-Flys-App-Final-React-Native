@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { storage } from "../utils/storage";
-import { AUTH_BASE_URL } from "../api/client";
+import { AUTH_BASE_URL, clearDefaultAuthorizationHeader, setDefaultAuthorizationHeader } from "../api/client";
 import { clearDataOnLogout } from "../utils/clearstorage";
 
 type AuthState = {
@@ -19,7 +19,7 @@ type AuthState = {
   refreshAccessToken: () => Promise<string | null>;
 };
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   accessToken: null,
   refreshToken: null,
   user: null,
@@ -31,6 +31,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     storage.set("access_token", accessToken),
     storage.set("refresh_token", refreshToken),
   ]);
+
+  setDefaultAuthorizationHeader(accessToken);
 
     set({
       accessToken,
@@ -69,6 +71,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       const refreshToken = await storage.get<string>("refresh_token");
       const user = await storage.get<any>("user");
 
+      if (accessToken) {
+        setDefaultAuthorizationHeader(accessToken);
+      }
+
       set({
         accessToken,
         refreshToken,
@@ -94,6 +100,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     await storage.remove("refresh_token");
     await storage.remove("user");
 
+    clearDefaultAuthorizationHeader();
+
     set({
       accessToken: null,
       refreshToken: null,
@@ -105,6 +113,8 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     logout: async () => {
     await clearDataOnLogout();
+
+    clearDefaultAuthorizationHeader();
 
     set({
       accessToken: null,
@@ -139,6 +149,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       await storage.remove("access_token");
       await storage.remove("refresh_token");
 
+      clearDefaultAuthorizationHeader();
+
       set({
         accessToken: null,
         refreshToken: null,
@@ -155,6 +167,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       await storage.remove("access_token");
       await storage.remove("refresh_token");
 
+      clearDefaultAuthorizationHeader();
+
       set({
         accessToken: null,
         refreshToken: null,
@@ -164,21 +178,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       return null;
     }
 
-      await Promise.all([
-      storage.set("access_token", newAccessToken),
-      storage.set("refresh_token", newRefreshToken),
-    ]);
+     await get().setTokens(newAccessToken, newRefreshToken);
 
-      set({
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-        isReady: true,
-        isAuthenticated: true,
-      });
-
-      return newAccessToken;
+    return newAccessToken;
     } catch {
       return null;
     }
-  },
-}));
+      },
+    }));

@@ -151,39 +151,10 @@ function BottomTabs() {
 
     export default function RootNavigator() {
     const accessToken = useAuthStore((s) => s.accessToken);
-    const isReady = useAuthStore((s) => s.isReady);
     const hasSeenIntro = useAppStore((s) => s.hasSeenIntro);
     const user = useAuthStore((s: any) => s.user);
     const openChat = useChatStore((s) => s.openChat);
     const closeChat = useChatStore((s) => s.closeChat);
-    useEffect(() => {
-        let mounted = true;
-
-        const initAuth = async () => {
-          try {
-            const { isAuthenticated, refreshAccessToken } = useAuthStore.getState();
-
-            if (isAuthenticated) {
-              await Promise.race([
-                refreshAccessToken(),
-                new Promise((resolve) => setTimeout(resolve, 5000)),
-              ]);
-            }
-          } catch (error) {
-            console.log("INIT AUTH ERROR:", error);
-          } finally {
-            if (mounted) {
-              useAuthStore.setState({ isReady: true });
-            }
-          }
-        };
-
-        initAuth();
-
-        return () => {
-          mounted = false;
-        };
-      }, []);
 
     const goalClassID = useMemo(() => {
       const payload: any = accessToken ? parseJwt(accessToken) : {};
@@ -206,10 +177,6 @@ function BottomTabs() {
       };
     }, [accessToken, goalClassID, openChat, closeChat]);
     
-
-    if (!isReady) {
-      return <SplashScreen />;
-    }
 
     const isLoggedIn = !!accessToken;
 

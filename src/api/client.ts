@@ -140,7 +140,7 @@ const attachToken = (
   return config;
 };
 
-const setDefaultAuthorizationHeader = (accessToken: string) => {
+export const setDefaultAuthorizationHeader = (accessToken: string) => {
   authClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
   testClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
   ebookClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
@@ -148,6 +148,16 @@ const setDefaultAuthorizationHeader = (accessToken: string) => {
   toolClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
   mentorshipClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
   chatClient.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+};
+
+export const clearDefaultAuthorizationHeader = () => {
+  delete authClient.defaults.headers.common.Authorization;
+  delete testClient.defaults.headers.common.Authorization;
+  delete ebookClient.defaults.headers.common.Authorization;
+  delete paymentClient.defaults.headers.common.Authorization;
+  delete toolClient.defaults.headers.common.Authorization;
+  delete mentorshipClient.defaults.headers.common.Authorization;
+  delete chatClient.defaults.headers.common.Authorization;
 };
 
 const refreshTokenAndRetry = async (error: AxiosError) => {
@@ -218,7 +228,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
 
       const status = refreshError?.response?.status;
 
-      if (status === 401 || status === 403) {
+      if (status === 400 || status === 401 || status === 403) {
         await useAuthStore.getState().clearTokens();
       }
 

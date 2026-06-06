@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { Platform, AppState } from "react-native";
 import remoteConfig from "@react-native-firebase/remote-config";
 import * as Application from "expo-application";
 import ForceUpdateScreen from "./src/screens/extrascreens/ForceUpdateScreen";
@@ -9,6 +9,7 @@ import RootNavigator from "./src/navigation/RootNavigator";
 import SplashScreen from "./src/screens/extrascreens/SplashScreen";
 import { useAuthStore } from "./src/store/auth.store";
 import { useAppStore } from "./src/store/app.store";
+import { setAuthToken } from "./src/api/client";
 import { initDatabase } from "./src/db/database";
 
 
@@ -19,6 +20,7 @@ export default function App() {
   const [updateUrl, setUpdateUrl] = useState("");
 
   const loadTokens = useAuthStore((s) => s.loadTokens);
+  const refreshAccessToken = useAuthStore((s) => s.refreshAccessToken);
   const authReady = useAuthStore((s) => s.isReady);
 
   const loadApp = useAppStore((s) => s.loadApp);
@@ -79,6 +81,21 @@ export default function App() {
           Promise.all([loadTokens(), loadApp()]),
           new Promise((resolve) => setTimeout(resolve, 3000)),
         ]);
+        const { accessToken, refreshToken } = useAuthStore.getState();
+
+        if (accessToken && refreshToken) {
+            await setAuthToken(accessToken, refreshToken);
+          } else if (accessToken) {
+            await setAuthToken(accessToken);
+          }
+
+        if (accessToken && refreshToken) {
+          try {
+            await refreshAccessToken();
+          } catch (error) {
+            console.log("Initial token refresh failed:", error);
+          }
+        }
 
         await Promise.race([
           checkForceUpdate(),
@@ -111,7 +128,31 @@ export default function App() {
         clearTimeout(timer);
       }
     };
-  }, [loadTokens, loadApp]);
+  }, [loadTokens, loadApp, refreshAccessToken]);
+
+  useEffect(() => {
+  let lastRefreshTime = 0;
+
+  const sub = AppState.addEventListener("change", async (state) => {
+    if (state !== "active") return;
+
+    const now = Date.now();
+
+    // 5 minutes ke andar dobara refresh mat karo
+    if (now - lastRefreshTime < 5 * 60 * 1000) return;
+
+    lastRefreshTime = now;
+
+    const { accessToken, refreshToken, refreshAccessToken } =
+      useAuthStore.getState();
+
+    if (accessToken && refreshToken) {
+      await refreshAccessToken();
+    }
+  });
+
+  return () => sub.remove();
+}, []);
 
   if (!fontsLoaded || !authReady || !appReady || checkingUpdate) {
   return <SplashScreen />;
