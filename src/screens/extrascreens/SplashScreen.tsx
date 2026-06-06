@@ -1,10 +1,10 @@
 import React, { useEffect, useRef } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   Animated,
   StatusBar,
+  Easing,
 } from "react-native";
 
 import { useAppStore } from "../../store/app.store";
@@ -13,68 +13,147 @@ import { checkAndMigrateAppData } from "../../utils/version";
 
 export default function SplashScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const scaleAnim = useRef(new Animated.Value(0.45)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   const hasSeenIntro = useAppStore((s) => s.hasSeenIntro);
   const accessToken = useAuthStore((s) => s.accessToken);
 
   useEffect(() => {
-  const initSplash = async () => {
-    try {
-    await Promise.race([
-    checkAndMigrateAppData(),
-    new Promise((resolve) => setTimeout(resolve, 3000)),
-      ]);
-    } catch (error) {
-      console.log("Migration error:", error);
-    }
+    const initSplash = async () => {
+      try {
+        await Promise.race([
+          checkAndMigrateAppData(),
+          new Promise((resolve) => setTimeout(resolve, 3000)),
+        ]);
+      } catch (error) {
+        console.log("Migration error:", error);
+      }
 
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 700,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 5,
-        useNativeDriver: true,
-      }),
-    ]).start();
+      Animated.parallel([
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnim, {
+          toValue: 1,
+          friction: 3,
+          tension: 80,
+          useNativeDriver: true,
+        }),
+        Animated.timing(rotateAnim, {
+          toValue: 1,
+          duration: 1000,
+          easing: Easing.out(Easing.back(2)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(floatAnim, {
+              toValue: -12,
+              duration: 1300,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(floatAnim, {
+              toValue: 0,
+              duration: 1300,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
 
-    console.log("Intro seen:", hasSeenIntro);
-    console.log("Token:", accessToken);
-  };
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 1.06,
+              duration: 1000,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 1000,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      });
+
+      console.log("Intro seen:", hasSeenIntro);
+      console.log("Token:", accessToken);
+    };
 
     initSplash();
   }, []);
+
+  const rotate = rotateAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["-25deg", "0deg"],
+  });
+
+  const glowScale = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.4, 1.35],
+  });
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.12],
+  });
 
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
 
-      <Animated.Image
-        source={require("../../assets/images/logo.png")}
+      <Animated.View
         style={[
-          styles.logo,
+          styles.glow,
           {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
+            opacity: glowOpacity,
+            transform: [{ scale: glowScale }],
           },
         ]}
-        resizeMode="contain"
       />
 
-      <Animated.Text style={[styles.title, { opacity: fadeAnim }]}>
-        Rank Flys
-      </Animated.Text>
-
-      <Animated.Text style={[styles.subtitle, { opacity: fadeAnim }]}>
-        Smart Learning. Better Results.
-      </Animated.Text>
+      <Animated.View
+        style={[
+          styles.logoWrapper,
+          {
+            opacity: fadeAnim,
+            transform: [
+              { scale: Animated.multiply(scaleAnim, pulseAnim) },
+              { rotate },
+              { translateY: floatAnim },
+            ],
+          },
+        ]}
+      >
+        <Animated.Image
+          source={require("../../assets/images/logo.png")}
+          style={styles.logo}
+          resizeMode="cover"
+        />
+      </Animated.View>
     </View>
   );
 }
+
+const LOGO_SIZE = 210;
 
 const styles = StyleSheet.create({
   screen: {
@@ -83,21 +162,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  glow: {
+    position: "absolute",
+    width: LOGO_SIZE + 20,
+    height: LOGO_SIZE + 20,
+    borderRadius: (LOGO_SIZE + 20) / 2,
+    backgroundColor: "#2563eb",
+  },
+  logoWrapper: {
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
+    borderRadius: LOGO_SIZE / 2,
+    overflow: "hidden",
+    backgroundColor: "#ffffff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 12,
+  },
   logo: {
-    width: 180,
-    height: 180,
-  },
-  title: {
-    marginTop: 20,
-    fontSize: 32,
-    fontWeight: "100",
-    fontFamily: "TitanOne",
-    color: "#0f172a",
-  },
-  subtitle: {
-    marginTop: 10,
-    fontSize: 15,
-    color: "#090909",
-    fontWeight: "600",
+    width: "100%",
+    height: "100%",
   },
 });

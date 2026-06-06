@@ -23,6 +23,7 @@ import { getBookCacheKey } from "../../utils/secureBookKey";
 import { EbookAPI } from "../../api/ebook.api";
 import { EbookDb } from "../../db/ebookDb";
 import BookPaywall from "../../components/books/BookPaywall";
+import * as ScreenCapture from "expo-screen-capture";
 
 const PAGE_LIMIT = 10;
 const A4_RATIO = 1.414;
@@ -101,6 +102,9 @@ export default function BookReaderScreen({ route, navigation }: any) {
   const [zoomImage, setZoomImage] = useState<string | null>(null);
 
   const scrollX = useRef(new Animated.Value(0)).current;
+  const loadingScale = useRef(new Animated.Value(1)).current;
+  const loadingRotate = useRef(new Animated.Value(0)).current;
+  const loadingTextOpacity = useRef(new Animated.Value(0.3)).current;
   const listRef = useRef<any>(null);
   const loadingRef = useRef(false);
   const currentPage = useRef(startPage);
@@ -127,12 +131,82 @@ export default function BookReaderScreen({ route, navigation }: any) {
   );
 
   const isCurrentBookmarked = bookmarkedPages.has(Number(pageLabel));
+  const loaderSpin = loadingRotate.interpolate({
+  inputRange: [0, 1],
+  outputRange: ["0deg", "360deg"],
+  });
+
+  useEffect(() => {
+  if (!loading) return;
+
+  const pulse = Animated.loop(
+    Animated.sequence([
+      Animated.timing(loadingScale, {
+        toValue: 1.2,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.timing(loadingScale, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+    ])
+  );
+
+  const rotate = Animated.loop(
+    Animated.timing(loadingRotate, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    })
+  );
+
+  pulse.start();
+  rotate.start();
+
+  const textPulse = Animated.loop(
+  Animated.sequence([
+    Animated.timing(loadingTextOpacity, {
+      toValue: 1,
+      duration: 700,
+      useNativeDriver: true,
+    }),
+    Animated.timing(loadingTextOpacity, {
+      toValue: 0.3,
+      duration: 700,
+      useNativeDriver: true,
+    }),
+  ])
+);
+
+textPulse.start();
+
+  return () => {
+    pulse.stop();
+    rotate.stop();
+    textPulse.stop();
+    loadingRotate.setValue(0);
+  };
+  }, [loading]);
 
   useEffect(() => {
     const sub = Dimensions.addEventListener("change", ({ window }) => {
       setScreen(window);
     });
     return () => sub?.remove?.();
+  }, []);
+
+  useEffect(() => {
+  const blockScreenshot = async () => {
+    await ScreenCapture.preventScreenCaptureAsync();
+  };
+
+  blockScreenshot();
+
+  return () => {
+    ScreenCapture.allowScreenCaptureAsync();
+  };
   }, []);
 
   const loadBookmarks = useCallback(async () => {
@@ -647,9 +721,32 @@ const handleSaveProgress = async () => {
           scrollEventThrottle={16}
           ListEmptyComponent={
             <View style={[styles.empty, { width: pageWidth, height: availableHeight }]}>
-              <ActivityIndicator size="large" color="#2563EB" />
-              <Text style={styles.emptyText}>Loading book...</Text>
+              <Animated.View
+                  style={[
+                    styles.bigLoader,
+                    {
+                      transform: [
+                        { scale: loadingScale },
+                        { rotate: loaderSpin },
+                      ],
+                    },
+                  ]}
+                />
+              <Animated.Text
+                style={[
+                  styles.emptyText,
+                  {
+                    opacity: loadingTextOpacity,
+                  },
+                ]}
+              >
+                Loading Book...
+              </Animated.Text>
+              <Animated.Text style={[styles.waitText, { opacity: loadingTextOpacity }]}>
+                Please wait 10–15 seconds
+              </Animated.Text>
             </View>
+            
           }
         />
       </View>
@@ -681,7 +778,17 @@ const handleSaveProgress = async () => {
 
       {loading && pages.length > 0 && (
         <View style={[styles.loadingFloat, { bottom: footerHeight + 12 }]}>
-          <ActivityIndicator size="small" color="#2563EB" />
+          <Animated.View
+            style={[
+              styles.customLoader,
+              {
+                transform: [
+                  { scale: loadingScale },
+                  { rotate: loaderSpin },
+                ],
+              },
+            ]}
+          />
           <Text style={styles.loadingFloatText}>Loading...</Text>
         </View>
       )}
@@ -875,7 +982,7 @@ const styles = StyleSheet.create({
     gap: 8,
     elevation: 4,
   },
-  primaryFooterText: { color: "#FFFFFF", fontSize: 14, fontWeight: "900" },
+  primaryFooterText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   saveFooterBtn: {
   height: 48,
   borderRadius: 16,
@@ -920,7 +1027,23 @@ saveFooterText: {
     borderColor: "#E5E7EB",
     elevation: 5,
   },
+  bigLoader: {
+  width: 50,
+  height: 50,
+  borderRadius: 25,
+  borderWidth: 5,
+  borderColor: "#BFDBFE",
+  borderTopColor: "#2563EB",
+},
   loadingFloatText: { color: "#475569", fontSize: 12, fontWeight: "800" },
+  customLoader: {
+  width: 20,
+  height: 20,
+  borderRadius: 10,
+  borderWidth: 3,
+  borderColor: "#BFDBFE",
+  borderTopColor: "#2563EB",
+  },
   zoomOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.96)" },
   zoomClose: {
     position: "absolute",
@@ -984,6 +1107,12 @@ saveFooterText: {
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
   },
+  waitText: {
+  color: "#94A3B8",
+  fontSize: 12,
+  fontWeight: "700",
+  marginTop: -4,
+},
   bookmarkIconBox: {
     width: 42,
     height: 42,
