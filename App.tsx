@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Platform, AppState } from "react-native";
+import { Platform } from "react-native";
 import remoteConfig from "@react-native-firebase/remote-config";
 import * as Application from "expo-application";
 import ForceUpdateScreen from "./src/screens/extrascreens/ForceUpdateScreen";
@@ -12,21 +12,24 @@ import { useAppStore } from "./src/store/app.store";
 import { setAuthToken } from "./src/api/client";
 import { initDatabase } from "./src/db/database";
 
+const BOOT_TIMEOUT_MS = 5000;
+const STORAGE_TIMEOUT_MS = 3000;
+const MIN_SPLASH_MS = 1200;
+const FORCE_UPDATE_DELAY_MS = 800;
 
 export default function App() {
   const [showCustomSplash, setShowCustomSplash] = useState(true);
-  const [checkingUpdate, setCheckingUpdate] = useState(true);
+  const [bootTimeoutDone, setBootTimeoutDone] = useState(false);
   const [forceUpdate, setForceUpdate] = useState(false);
   const [updateUrl, setUpdateUrl] = useState("");
 
   const loadTokens = useAuthStore((s) => s.loadTokens);
-  const refreshAccessToken = useAuthStore((s) => s.refreshAccessToken);
   const authReady = useAuthStore((s) => s.isReady);
 
   const loadApp = useAppStore((s) => s.loadApp);
   const appReady = useAppStore((s) => s.isAppReady);
 
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Bungee: require("./src/assets/fonts/Bungee-Regular.ttf"),
     TitanOne: require("./src/assets/fonts/TitanOne.ttf"),
     Geologica: require("./src/assets/fonts/Geologica.ttf"),
@@ -42,7 +45,9 @@ export default function App() {
       });
 
       await remoteConfig().setConfigSettings({
-        minimumFetchIntervalMillis: 0,
+        minimumFetchIntervalMillis: __DEV__
+          ? 0
+          : 4 * 60 * 60 * 1000,
       });
 
       await remoteConfig().fetchAndActivate();
@@ -63,59 +68,64 @@ export default function App() {
       }
     } catch (error) {
       console.log("Force update check error:", error);
-    } finally {
-      setCheckingUpdate(false);
     }
   };
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
     let isMounted = true;
+    let minSplashTimer: ReturnType<typeof setTimeout> | null = null;
+    let bootTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+    let forceUpdateTimer: ReturnType<typeof setTimeout> | null = null;
+
+    bootTimeoutTimer = setTimeout(() => {
+      if (!isMounted) return;
+
+      useAuthStore.setState({ isReady: true });
+      useAppStore.setState({ isAppReady: true });
+
+      setBootTimeoutDone(true);
+      setShowCustomSplash(false);
+    }, BOOT_TIMEOUT_MS);
 
     async function initApp() {
       try {
-        // Ye database.ts me ebook + test sab tables create kar raha hai
-        initDatabase();
+        await initDatabase();
 
         await Promise.race([
-          Promise.all([loadTokens(), loadApp()]),
-          new Promise((resolve) => setTimeout(resolve, 3000)),
+          Promise.all([
+            loadTokens(),
+            loadApp(),
+          ]),
+          new Promise((resolve) =>
+            setTimeout(resolve, STORAGE_TIMEOUT_MS)
+          ),
         ]);
+
         const { accessToken, refreshToken } = useAuthStore.getState();
 
         if (accessToken && refreshToken) {
-            await setAuthToken(accessToken, refreshToken);
-          } else if (accessToken) {
-            await setAuthToken(accessToken);
-          }
-
-        if (accessToken && refreshToken) {
-          try {
-            await refreshAccessToken();
-          } catch (error) {
-            console.log("Initial token refresh failed:", error);
-          }
+          await setAuthToken(accessToken, refreshToken);
+        } else if (accessToken) {
+          await setAuthToken(accessToken);
         }
 
-        await Promise.race([
-          checkForceUpdate(),
-          new Promise((resolve) => setTimeout(resolve, 5000)),
-        ]);
-           } catch (error) {
-            console.log("App Init Error:", error);
-            setCheckingUpdate(false);
-            useAuthStore.setState({ isReady: true });
-            useAppStore.setState({ isAppReady: true });
-          } finally {
+        forceUpdateTimer = setTimeout(() => {
+          checkForceUpdate().catch(console.log);
+        }, FORCE_UPDATE_DELAY_MS);
+      } catch (error) {
+        console.log("App Init Error:", error);
+      } finally {
+        if (!isMounted) return;
+
         useAuthStore.setState({ isReady: true });
         useAppStore.setState({ isAppReady: true });
-        setCheckingUpdate(false);
 
-        timer = setTimeout(() => {
-          if (isMounted) {
-            setShowCustomSplash(false);
-          }
-        }, 1500);
+        minSplashTimer = setTimeout(() => {
+          if (!isMounted) return;
+
+          setShowCustomSplash(false);
+          setBootTimeoutDone(true);
+        }, MIN_SPLASH_MS);
       }
     }
 
@@ -124,41 +134,28 @@ export default function App() {
     return () => {
       isMounted = false;
 
-      if (timer) {
-        clearTimeout(timer);
+      if (minSplashTimer) {
+        clearTimeout(minSplashTimer);
+      }
+
+      if (bootTimeoutTimer) {
+        clearTimeout(bootTimeoutTimer);
+      }
+
+      if (forceUpdateTimer) {
+        clearTimeout(forceUpdateTimer);
       }
     };
-  }, [loadTokens, loadApp, refreshAccessToken]);
+  }, [loadTokens, loadApp]);
 
-  useEffect(() => {
-  let lastRefreshTime = 0;
-
-  const sub = AppState.addEventListener("change", async (state) => {
-    if (state !== "active") return;
-
-    const now = Date.now();
-
-    // 5 minutes ke andar dobara refresh mat karo
-    if (now - lastRefreshTime < 5 * 60 * 1000) return;
-
-    lastRefreshTime = now;
-
-    const { accessToken, refreshToken, refreshAccessToken } =
-      useAuthStore.getState();
-
-    if (accessToken && refreshToken) {
-      await refreshAccessToken();
-    }
-  });
-
-  return () => sub.remove();
-}, []);
-
-  if (!fontsLoaded || !authReady || !appReady || checkingUpdate) {
-  return <SplashScreen />;
+  if (
+    !bootTimeoutDone &&
+    ((!fontsLoaded && !fontError) || !authReady || !appReady)
+  ) {
+    return <SplashScreen />;
   }
 
-  if (showCustomSplash) {
+  if (!bootTimeoutDone && showCustomSplash) {
     return <SplashScreen />;
   }
 

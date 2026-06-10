@@ -192,7 +192,7 @@ function BottomTabs() {
     }, [accessToken, goalClassID, openChat, closeChat]);
     
 
-    const isLoggedIn = !!accessToken;
+    const isLoggedIn = useAuthStore((s) => s.isAuthenticated);
 
   return (
     <NavigationContainer>

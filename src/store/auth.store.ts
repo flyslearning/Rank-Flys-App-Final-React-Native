@@ -146,37 +146,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const data = await res.json();
 
       if (!res.ok) {
-      await storage.remove("access_token");
-      await storage.remove("refresh_token");
+        if (res.status === 401 || res.status === 403) {
+          await get().clearTokens();
+        }
 
-      clearDefaultAuthorizationHeader();
-
-      set({
-        accessToken: null,
-        refreshToken: null,
-        isAuthenticated: false,
-      });
-
-      return null;
-    }
+        return null;
+      }
 
       const newAccessToken = data.access_token || data.accessToken;
       const newRefreshToken = data.refresh_token || data.refreshToken;
 
       if (!newAccessToken || !newRefreshToken) {
-      await storage.remove("access_token");
-      await storage.remove("refresh_token");
-
-      clearDefaultAuthorizationHeader();
-
-      set({
-        accessToken: null,
-        refreshToken: null,
-        isAuthenticated: false,
-      });
-
-      return null;
-    }
+        return null;
+      }
 
      await get().setTokens(newAccessToken, newRefreshToken);
 

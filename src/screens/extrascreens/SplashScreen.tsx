@@ -18,6 +18,8 @@ export default function SplashScreen() {
   const floatAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
+  const floatLoop = useRef<Animated.CompositeAnimation | null>(null);
+  const pulseLoop = useRef<Animated.CompositeAnimation | null>(null);
 
   const hasSeenIntro = useAppStore((s) => s.hasSeenIntro);
   const accessToken = useAuthStore((s) => s.accessToken);
@@ -59,7 +61,7 @@ export default function SplashScreen() {
           useNativeDriver: true,
         }),
       ]).start(() => {
-        Animated.loop(
+        floatLoop.current = Animated.loop(
           Animated.sequence([
             Animated.timing(floatAnim, {
               toValue: -12,
@@ -74,9 +76,11 @@ export default function SplashScreen() {
               useNativeDriver: true,
             }),
           ])
-        ).start();
+        );
 
-        Animated.loop(
+        floatLoop.current.start();
+
+        pulseLoop.current = Animated.loop(
           Animated.sequence([
             Animated.timing(pulseAnim, {
               toValue: 1.06,
@@ -91,7 +95,9 @@ export default function SplashScreen() {
               useNativeDriver: true,
             }),
           ])
-        ).start();
+        );
+
+        pulseLoop.current.start();
       });
 
       console.log("Intro seen:", hasSeenIntro);
@@ -99,7 +105,12 @@ export default function SplashScreen() {
     };
 
     initSplash();
-  }, []);
+
+    return () => {
+      floatLoop.current?.stop();
+      pulseLoop.current?.stop();
+    };
+    }, []);
 
   const rotate = rotateAnim.interpolate({
     inputRange: [0, 1],

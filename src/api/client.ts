@@ -207,7 +207,6 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
       response.data.refresh_token || response.data.refreshToken;
 
       if (!newAccessToken || !newRefreshToken) {
-      await useAuthStore.getState().clearTokens();
       return Promise.reject(error);
       }
 
@@ -228,7 +227,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
 
       const status = refreshError?.response?.status;
 
-      if (status === 400 || status === 401 || status === 403) {
+      if (status === 401 || status === 403) {
         await useAuthStore.getState().clearTokens();
       }
 

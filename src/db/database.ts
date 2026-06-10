@@ -49,6 +49,9 @@ function resetDatabaseTables() {
   safeExec(`DROP TABLE IF EXISTS books;`);
   safeExec(`DROP TABLE IF EXISTS book_pages;`);
   safeExec(`DROP TABLE IF EXISTS library_pass_plans;`);
+  safeExec(`DROP TABLE IF EXISTS personalized_classroom_products;`);
+  safeExec(`DROP TABLE IF EXISTS personalized_classroom_images;`);
+  safeExec(`DROP TABLE IF EXISTS personalized_classroom_home;`);
 }
 
 function runDbMigrations() {
@@ -335,6 +338,39 @@ safeExec(`
     cached_at INTEGER
   );
 `);
+  safeExec(`
+  CREATE TABLE IF NOT EXISTS personalized_classroom_products (
+    id TEXT PRIMARY KEY NOT NULL,
+    goal_class_id TEXT,
+    title TEXT,
+    description TEXT,
+    thumbnail_url TEXT,
+    max_students_per_batch INTEGER DEFAULT 20,
+    has_access INTEGER DEFAULT 0,
+    access_state TEXT,
+    cached_at INTEGER
+  );
+`);
+
+safeExec(`
+  CREATE TABLE IF NOT EXISTS personalized_classroom_images (
+    id TEXT PRIMARY KEY NOT NULL,
+    product_id TEXT,
+    image_url TEXT,
+    sort_order INTEGER DEFAULT 0,
+    cached_at INTEGER
+  );
+`);
+
+safeExec(`
+  CREATE TABLE IF NOT EXISTS personalized_classroom_home (
+    id TEXT PRIMARY KEY NOT NULL,
+    classroom_json TEXT,
+    subjects_json TEXT,
+    enrollment_json TEXT,
+    cached_at INTEGER
+  );
+`);
 
   safeExec(`
     CREATE INDEX IF NOT EXISTS idx_ebook_nodes_series_parent
@@ -375,6 +411,15 @@ safeExec(`
     CREATE INDEX IF NOT EXISTS idx_library_pass_goal
     ON library_pass_plans(goal_class_id);
   `);
+  safeExec(`
+  CREATE INDEX IF NOT EXISTS idx_pc_details_cached
+  ON personalized_classroom_details(cached_at);
+`);
+
+safeExec(`
+  CREATE INDEX IF NOT EXISTS idx_pc_home_cached
+  ON personalized_classroom_home(cached_at);
+`);
 
   initStudySessionTable();
 }

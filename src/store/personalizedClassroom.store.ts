@@ -11,6 +11,7 @@ import {
   CreatePersonalizedClassroomOrderResponse,
   VerifyPersonalizedClassroomPaymentBody,
 } from "../api/personalizedClassroom.api";
+import { PersonalizedClassroomDb } from "../db/personalizedClassroomDb";
 
 type AccessState =
   | "none"
@@ -128,98 +129,160 @@ export const usePersonalizedClassroomStore =
     },
 
     loadDetails: async () => {
+  set({
+    loading: true,
+    detailsLoading: true,
+    error: null,
+  });
+
+  try {
+    const cached = await PersonalizedClassroomDb.getDetails();
+
+    if (cached) {
       set({
-        loading: true,
-        detailsLoading: true,
+        product: cached.product ?? null,
+        images: normalizeArray(cached.images),
+        plans: normalizeArray(cached.plans),
+        hasAccess: Boolean(cached.has_access),
+        accessState: cached.access_state ?? null,
+        locked: cached.access_state === "locked",
+        detailsLoading: false,
+      });
+    }
+
+    const res = await getPersonalizedClassroomDetails();
+    const data = res.data;
+
+    await PersonalizedClassroomDb.saveDetails(data);
+
+    set({
+      product: data?.product ?? null,
+      images: normalizeArray(data?.images),
+      plans: normalizeArray(data?.plans),
+      hasAccess: Boolean(data?.has_access),
+      accessState: data?.access_state ?? null,
+      locked: data?.access_state === "locked",
+    });
+  } catch (err) {
+    console.log("LOAD PC DETAILS ERROR:", err);
+
+    const cached = await PersonalizedClassroomDb.getDetails();
+
+    if (cached) {
+      set({
+        product: cached.product ?? null,
+        images: normalizeArray(cached.images),
+        plans: normalizeArray(cached.plans),
+        hasAccess: Boolean(cached.has_access),
+        accessState: cached.access_state ?? null,
+        locked: cached.access_state === "locked",
         error: null,
       });
-
-      try {
-        const res = await getPersonalizedClassroomDetails();
-
-        const data = res.data;
-
-        set({
-          product: data?.product ?? null,
-          images: normalizeArray<PersonalizedClassroomImage>(data?.images),
-          plans: normalizeArray<PersonalizedClassroomPlan>(data?.plans),
-          hasAccess: Boolean(data?.has_access),
-          accessState: data?.access_state ?? null,
-          locked: data?.access_state === "locked",
-        });
-      } catch (err) {
-        console.log("LOAD PC DETAILS ERROR:", err);
-
-        set({
-          product: null,
-          images: [],
-          plans: [],
-          hasAccess: false,
-          accessState: null,
-          error: getErrorMessage(err),
-        });
-      } finally {
-        set({
-          loading: false,
-          detailsLoading: false,
-        });
-      }
-    },
+    } else {
+      set({
+        product: null,
+        images: [],
+        plans: [],
+        hasAccess: false,
+        accessState: null,
+        error: getErrorMessage(err),
+      });
+    }
+  } finally {
+    set({
+      loading: false,
+      detailsLoading: false,
+    });
+  }
+},
 
     loadHome: async () => {
+  set({
+    loading: true,
+    homeLoading: true,
+    error: null,
+  });
+
+  try {
+    const cached = await PersonalizedClassroomDb.getHome();
+
+    if (cached) {
       set({
-        loading: true,
-        homeLoading: true,
-        error: null,
+        classroomHome: cached,
+        classroom: cached?.classroom ?? null,
+        subjects: normalizeArray(cached?.subjects),
+        enrollment: cached?.enrollment ?? null,
+        hasAccess: true,
+        accessState: cached?.enrollment?.status ?? "active",
+        locked: false,
+        homeLoading: false,
+      });
+    }
+
+    const res = await getPersonalizedClassroomHome();
+
+    if (res.locked) {
+      set({
+        locked: true,
+        classroomHome: null,
+        classroom: null,
+        subjects: [],
+        enrollment: null,
+        hasAccess: false,
+        accessState: "locked",
+        error: res.message || "Your classroom access is locked. Please renew.",
       });
 
-      try {
-        const res = await getPersonalizedClassroomHome();
+      return;
+    }
 
-        if (res.locked) {
-          set({
-            locked: true,
-            classroomHome: null,
-            classroom: null,
-            subjects: [],
-            enrollment: null,
-            hasAccess: false,
-            accessState: "locked",
-            error: res.message || "Your classroom access is locked. Please renew.",
-          });
+    const data = res.data ?? null;
 
-          return;
-        }
+    if (data) {
+      await PersonalizedClassroomDb.saveHome(data);
+    }
 
-        const data = res.data ?? null;
+    set({
+      locked: false,
+      classroomHome: data,
+      classroom: data?.classroom ?? null,
+      subjects: normalizeArray(data?.subjects),
+      enrollment: data?.enrollment ?? null,
+      hasAccess: true,
+      accessState: data?.enrollment?.status ?? "active",
+    });
+  } catch (err) {
+    console.log("LOAD PC HOME ERROR:", err);
 
-        set({
-          locked: false,
-          classroomHome: data,
-          classroom: data?.classroom ?? null,
-          subjects: normalizeArray(data?.subjects),
-          enrollment: data?.enrollment ?? null,
-          hasAccess: true,
-          accessState: data?.enrollment?.status ?? "active",
-        });
-      } catch (err) {
-        console.log("LOAD PC HOME ERROR:", err);
+    const cached = await PersonalizedClassroomDb.getHome();
 
-        set({
-          classroomHome: null,
-          classroom: null,
-          subjects: [],
-          enrollment: null,
-          error: getErrorMessage(err),
-        });
-      } finally {
-        set({
-          loading: false,
-          homeLoading: false,
-        });
-      }
-    },
-
+    if (cached) {
+      set({
+        classroomHome: cached,
+        classroom: cached?.classroom ?? null,
+        subjects: normalizeArray(cached?.subjects),
+        enrollment: cached?.enrollment ?? null,
+        hasAccess: true,
+        accessState: cached?.enrollment?.status ?? "active",
+        locked: false,
+        error: null,
+      });
+    } else {
+      set({
+        classroomHome: null,
+        classroom: null,
+        subjects: [],
+        enrollment: null,
+        error: getErrorMessage(err),
+      });
+    }
+  } finally {
+    set({
+      loading: false,
+      homeLoading: false,
+    });
+  }
+},
     createOrder: async (planID?: string) => {
       const finalPlanID = planID || get().selectedPlan?.id;
 
