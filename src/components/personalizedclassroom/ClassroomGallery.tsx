@@ -126,10 +126,6 @@ export default function ClassroomGallery({ images }: { images: any[] }) {
             ]}
           >
             <Image source={{ uri: url }} style={styles.image} />
-
-            <View style={styles.imageFooter}>
-              <Text style={styles.imageLabel}>Preview {index + 1}</Text>
-            </View>
           </Animated.View>
         ))}
       </ScrollView>
@@ -206,21 +202,5 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
     resizeMode: "cover",
-  },
-
-  imageFooter: {
-    position: "absolute",
-    left: 12,
-    bottom: 12,
-    backgroundColor: "rgba(15, 23, 42, 0.72)",
-    paddingHorizontal: 11,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-
-  imageLabel: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "900",
   },
 });

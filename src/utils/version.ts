@@ -20,7 +20,7 @@ export const isVersionLower = (current: string, minimum: string) => {
   return false;
 };
 
-const APP_DATA_VERSION = '5';
+const APP_DATA_VERSION = '6';
 
 const CACHE_KEYS_TO_CLEAR = [
   'home_cache',

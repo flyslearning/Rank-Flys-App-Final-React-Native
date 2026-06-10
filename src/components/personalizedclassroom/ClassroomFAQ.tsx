@@ -39,7 +39,7 @@ const FAQS = [
 ];
 
 export default function ClassroomFAQ() {
-  const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
   const rotateValues = useRef(FAQS.map(() => new Animated.Value(0))).current;
 
   const toggleFAQ = (index: number) => {
