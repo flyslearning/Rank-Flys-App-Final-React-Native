@@ -206,4 +206,34 @@ export async function getAnalyticsDashboard() {
   return res.data;
 }
 
+// ================= ADVERTISEMENTS =================
+
+export type ToolAdvertisementAction = {
+  type: string;
+  id?: string;
+  url?: string;
+};
+
+export type ToolAdvertisement = {
+  id: string;
+  title: string;
+  image_url: string;
+  action?: ToolAdvertisementAction;
+};
+
+export type ToolAdvertisementResponse = {
+  data: ToolAdvertisement[] | null;
+  success: boolean;
+};
+
+export async function getToolAdvertisements(): Promise<ToolAdvertisementResponse> {
+  console.log("HIT API:", apiPath("/tools/advertisements"));
+
+  const res = await toolClient.get<ToolAdvertisementResponse>(
+    apiPath("/tools/advertisements")
+  );
+
+  return res.data;
+}
+
 

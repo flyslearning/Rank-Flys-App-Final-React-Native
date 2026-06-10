@@ -19,6 +19,7 @@ import SyllabusTracker from "../screens/toolscreens/SyllabusTracker";
 import StudyPlanner from "../screens/toolscreens/StudyPlanner";
 import StudyTechnique from "../screens/toolscreens/StudyTechnique";
 import FlashCard from "../screens/toolscreens/FlashCard";
+import GlobalSearchScreen from "../screens/GlobalSearchScreen";
 
 import HomeScreen from "../screens/HomeScreen";
 
@@ -376,6 +377,11 @@ function BottomTabs() {
           component={FlysLibraryScreen}
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+              name="GlobalSearch"
+              component={GlobalSearchScreen}
+              options={{ headerShown: false }}
+            />
            </>
           
         )}

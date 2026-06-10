@@ -1,5 +1,3 @@
-// src/components/home/HomeHeader.tsx
-
 import React, { useRef, useState } from "react";
 import {
   View,
@@ -7,7 +5,6 @@ import {
   StyleSheet,
   Platform,
   TouchableOpacity,
-  TextInput,
   Animated,
   Dimensions,
   Pressable,
@@ -52,7 +49,6 @@ export default function HomeHeader({
   const insets = useSafeAreaInsets();
   const logout = useAuthStore((state) => state.logout);
 
-  const [search, setSearch] = useState(searchValue);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
@@ -126,10 +122,6 @@ export default function HomeHeader({
     ]);
   };
 
-  const handleSearch = (text: string) => {
-    setSearch(text);
-    onSearchChange?.(text);
-  };
 
   const pressMenuIn = () => {
     Animated.spring(menuPressScale, {
@@ -167,25 +159,16 @@ export default function HomeHeader({
             </TouchableOpacity>
           </Animated.View>
 
-          <View style={styles.searchBox}>
-            <Ionicons name="search" size={20} color="#2563EB" />
+          <Pressable
+          style={styles.searchBox}
+          onPress={() => navigation?.navigate?.("GlobalSearch")}
+        >
+          <Ionicons name="search" size={20} color="#2563EB" />
 
-            <TextInput
-              value={search}
-              onChangeText={handleSearch}
-              placeholder={placeholder}
-              placeholderTextColor="#9CA3AF"
-              style={styles.searchInput}
-              cursorColor="#2563EB"
-              returnKeyType="search"
-            />
-
-            {search.length > 0 && (
-              <TouchableOpacity onPress={() => handleSearch("")} style={styles.clearButton}>
-                <Ionicons name="close" size={17} color="#2563EB" />
-              </TouchableOpacity>
-            )}
-          </View>
+          <Text style={styles.searchPlaceholder}>
+            {placeholder}
+          </Text>
+        </Pressable>
         </View>
       </SafeAreaView>
 
@@ -361,24 +344,6 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
 
-  searchInput: {
-    flex: 1,
-    height: "100%",
-    fontSize: isSmall ? 14 : 15,
-    fontWeight: "600",
-    color: "#111827",
-    paddingVertical: 0,
-  },
-
-  clearButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    backgroundColor: "#EFF6FF",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
   modalRoot: {
     flex: 1,
   },
@@ -518,6 +483,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#EFF6FF",
     borderColor: "#BFDBFE",
   },
+  searchPlaceholder: {
+  flex: 1,
+  fontSize: isSmall ? 14 : 15,
+  fontWeight: "600",
+  color: "#9CA3AF",
+},
 
   menuIconBox: {
     width: isSmall ? 38 : 40,
