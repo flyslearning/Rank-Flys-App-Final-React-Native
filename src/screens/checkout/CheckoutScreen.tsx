@@ -332,13 +332,6 @@ export default function CheckoutScreen({ route, navigation }: any) {
                 </View>
               )}
 
-              <View style={styles.heroOverlay} />
-
-              <View style={styles.typeBadge}>
-                <Ionicons name="sparkles" size={14} color="#fff" />
-                <Text style={styles.typeBadgeText}>{contentLabel}</Text>
-              </View>
-
               {discountPercent > 0 && !hasAccess && !isFree && (
                 <View style={styles.heroDiscountBadge}>
                   <Text style={styles.heroDiscountText}>{discountPercent}% OFF</Text>
@@ -631,27 +624,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
     color: BLUE,
-  },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15,23,42,0.12)",
-  },
-  typeBadge: {
-    position: "absolute",
-    left: 14,
-    top: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "rgba(15,23,42,0.82)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  typeBadgeText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "900",
   },
   heroDiscountBadge: {
     position: "absolute",

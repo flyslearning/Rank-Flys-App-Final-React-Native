@@ -62,11 +62,18 @@ export type CreatePersonalizedClassroomOrderResponse = {
   data: {
     plan: PersonalizedClassroomPlan;
     payment_order: {
-      order_id: string;
-      provider_order_id: string;
-      amount_paise: number;
+    order_id: string;
+    provider_order_id: string;
+    amount_paise: number;
+
+    key_id?: string;
+    razorpay_key_id?: string;
+    provider_key_id?: string;
+    razorpay_order_id?: string;
+    amount?: number;
+    currency?: string;
     };
-  };
+    };
 };
 
 export type VerifyPersonalizedClassroomPaymentBody = {

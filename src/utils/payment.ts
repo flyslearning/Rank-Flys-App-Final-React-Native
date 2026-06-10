@@ -2,6 +2,9 @@ import { Alert } from "react-native";
 import RazorpayCheckout from "react-native-razorpay";
 import { PaymentAPI, ContentType } from "../api/payment.api";
 import { mentorshipApi } from "../api/mentorship.api";
+import {
+  createPersonalizedClassroomOrder,
+} from "../api/personalizedClassroom.api";
 
 export const startPayment = async (params: {
   contentId: string;
@@ -136,5 +139,90 @@ export const startMentorshipPayment = async (params: {
     }
 
     Alert.alert("Payment Failed", "Payment start nahi ho paya.");
+  }
+};
+
+export const startPersonalizedClassroomPayment = async (params: {
+  planId: string;
+  title: string;
+  navigation: any;
+}) => {
+  try {
+    const body = {
+      plan_id: params.planId,
+    };
+
+    console.log("CREATE PC ORDER BODY", body);
+
+    const orderData = await createPersonalizedClassroomOrder(params.planId);
+
+    console.log("PC CREATE ORDER RESPONSE", JSON.stringify(orderData, null, 2));
+
+    const plan = orderData?.data?.plan;
+    const paymentOrder = orderData?.data?.payment_order;
+
+    const keyId =
+      paymentOrder?.key_id ||
+      paymentOrder?.razorpay_key_id ||
+      paymentOrder?.provider_key_id;
+
+    const providerOrderId =
+      paymentOrder?.provider_order_id ||
+      paymentOrder?.razorpay_order_id;
+
+    const amount = Number(
+      paymentOrder?.amount_paise || paymentOrder?.amount || 0
+    );
+
+    const paymentOrderId = paymentOrder?.order_id;
+
+    if (!plan?.id) {
+      Alert.alert("Error", "Plan ID backend se nahi mila.");
+      return;
+    }
+
+    if (!paymentOrderId) {
+      Alert.alert("Error", "Internal payment order ID backend se nahi mila.");
+      return;
+    }
+
+    if (!keyId) {
+      Alert.alert("Error", "Razorpay key_id backend se nahi mila.");
+      return;
+    }
+
+    if (!providerOrderId || !String(providerOrderId).startsWith("order_")) {
+      Alert.alert("Error", "Valid Razorpay order id backend se nahi mila.");
+      return;
+    }
+
+    if (!amount || amount <= 0) {
+      Alert.alert("Error", "Payment amount invalid hai.");
+      return;
+    }
+
+    params.navigation.navigate("RazorpayWebView", {
+      paymentFor: "personalized_classroom",
+      planId: plan.id,
+      paymentOrderId,
+      keyId,
+      amount,
+      currency: paymentOrder?.currency || "INR",
+      providerOrderId,
+      title: params.title || plan.title || "Personalized Classroom",
+    });
+  } catch (error: any) {
+    console.log(
+      "PC payment error:",
+      error?.response?.data || error?.description || error?.message || error
+    );
+
+    Alert.alert(
+      "Payment Failed",
+      error?.response?.data?.message ||
+        error?.description ||
+        error?.message ||
+        "Payment start nahi ho paya."
+    );
   }
 };

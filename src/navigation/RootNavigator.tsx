@@ -20,6 +20,9 @@ import StudyPlanner from "../screens/toolscreens/StudyPlanner";
 import StudyTechnique from "../screens/toolscreens/StudyTechnique";
 import FlashCard from "../screens/toolscreens/FlashCard";
 import GlobalSearchScreen from "../screens/GlobalSearchScreen";
+import PersonalizedClassroomDetailsScreen from "../screens/personalizedclassroom/PersonalizedClassroomDetailsScreen";
+import PersonalizedClassroomHomeScreen from "../screens/personalizedclassroom/PersonalizedClassroomHomeScreen";
+import PersonalizedClassroomPaymentSuccessScreen from "../screens/personalizedclassroom/PersonalizedClassroomPaymentSuccessScreen";
 
 import HomeScreen from "../screens/HomeScreen";
 
@@ -95,7 +98,7 @@ function BottomTabs() {
           if (route.name === "Home") iconName = "home-outline";
           if (route.name === "Connect") iconName = "people-outline";
           if (route.name === "Flys") iconName = "play-circle-outline";
-          if (route.name === "Ebook") iconName = "book-outline";
+          if (route.name === "Study") iconName = "school-outline";
           if (route.name === "Doubt") iconName = "help-circle-outline";
           
 
@@ -136,10 +139,20 @@ function BottomTabs() {
       />
 
       <Tab.Screen
-        name="Ebook"
-        component={EbookSeriesScreen}
-        options={{ title: "Ebook Series", tabBarLabel: "Ebooks" }}
-      />
+      name="Study"
+      component={HomeScreen}
+      listeners={({ navigation }) => ({
+        tabPress: (e) => {
+          e.preventDefault();
+
+          navigation.getParent()?.navigate("PersonalizedClassroomDetails");
+        },
+      })}
+      options={{
+        headerShown: false,
+        tabBarLabel: "Study",
+      }}
+    />
 
       <Tab.Screen
         name="Doubt"
@@ -380,6 +393,24 @@ function BottomTabs() {
         <Stack.Screen
               name="GlobalSearch"
               component={GlobalSearchScreen}
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
+              name="PersonalizedClassroomDetails"
+              component={PersonalizedClassroomDetailsScreen}
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
+              name="PersonalizedClassroomHome"
+              component={PersonalizedClassroomHomeScreen}
+              options={{ headerShown: false }}
+            />
+
+            <Stack.Screen
+              name="PersonalizedClassroomPaymentSuccess"
+              component={PersonalizedClassroomPaymentSuccessScreen}
               options={{ headerShown: false }}
             />
            </>
