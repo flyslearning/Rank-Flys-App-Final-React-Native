@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { recordError } from "../../utils/crashlytics";
 import {
   View,
   Text,
@@ -12,7 +13,6 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { startPersonalizedClassroomPayment } from "../../utils/payment";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePersonalizedClassroomStore } from "../../store/personalizedClassroom.store";
@@ -26,6 +26,8 @@ import ClassroomFAQ from "../../components/personalizedclassroom/ClassroomFAQ";
 import BottomBuyBar from "../../components/personalizedclassroom/BottomBuyBar";
 import ClassroomEnquiryCard from "../../components/personalizedclassroom/ClassroomEnquiryCard";
 
+const DETAILS_TIMEOUT_MS = 20000;
+
 function getImageUrl(img: any) {
   if (!img) return "";
   if (typeof img === "string") return img;
@@ -35,6 +37,7 @@ function getImageUrl(img: any) {
 export default function PersonalizedClassroomDetailsScreen() {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const [localError, setLocalError] = useState("");
 
   const {
     product,
@@ -52,9 +55,36 @@ export default function PersonalizedClassroomDetailsScreen() {
     clearError,
   } = usePersonalizedClassroomStore();
 
+    const safeLoadDetails = useCallback(async () => {
+    try {
+      setLocalError("");
+
+      await Promise.race([
+        loadDetails(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Personalized classroom details timeout")),
+            DETAILS_TIMEOUT_MS
+          )
+        ),
+      ]);
+    } catch (error) {
+      console.log("Personalized classroom load error:", error);
+
+      recordError(
+        error,
+        "PersonalizedClassroomDetailsScreen: load details failed"
+      );
+
+      setLocalError(
+        "Classroom details load nahi ho paayi. Internet check karke retry karo."
+      );
+    }
+  }, [loadDetails]);
+
   useEffect(() => {
-    loadDetails();
-  }, []);
+    safeLoadDetails();
+  }, [safeLoadDetails]);
 
   useEffect(() => {
     if (hasAccess && accessState === "active") {
@@ -64,9 +94,16 @@ export default function PersonalizedClassroomDetailsScreen() {
 
   useEffect(() => {
     if (error) {
+      recordError(
+        new Error(error),
+        "PersonalizedClassroomDetailsScreen: store error"
+      );
+
+      setLocalError(error);
+
       Alert.alert("Error", error, [{ text: "OK", onPress: clearError }]);
     }
-  }, [error]);
+  }, [error, clearError]);
 
   const thumbnailUrl = useMemo(() => {
     return product?.thumbnail_url || getImageUrl(images?.[0]);
@@ -101,13 +138,29 @@ const handleBuyNow = async () => {
   });
 };
 
-  if (detailsLoading && !product) {
+  if ((detailsLoading || localError) && !product) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" backgroundColor="#F8F9FB" />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563EB" />
-          <Text style={styles.loadingText}>Loading classroom...</Text>
+          {localError ? (
+            <>
+              <Ionicons name="cloud-offline-outline" size={54} color="#94A3B8" />
+
+              <Text style={styles.errorTitle}>Unable to load classroom</Text>
+
+              <Text style={styles.errorText}>{localError}</Text>
+
+              <TouchableOpacity style={styles.retryBtn} onPress={safeLoadDetails}>
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator size="large" color="#2563EB" />
+              <Text style={styles.loadingText}>Loading classroom...</Text>
+            </>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -256,4 +309,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 100,
   },
+  errorTitle: {
+  marginTop: 12,
+  fontSize: 20,
+  fontWeight: "900",
+  color: "#111827",
+},
+errorText: {
+  marginTop: 8,
+  paddingHorizontal: 28,
+  fontSize: 13,
+  fontWeight: "700",
+  color: "#64748B",
+  textAlign: "center",
+  lineHeight: 20,
+},
+retryBtn: {
+  marginTop: 16,
+  height: 44,
+  paddingHorizontal: 24,
+  borderRadius: 14,
+  backgroundColor: "#2563EB",
+  justifyContent: "center",
+  alignItems: "center",
+},
+retryText: {
+  color: "#FFFFFF",
+  fontSize: 14,
+  fontWeight: "900",
+},
 });
