@@ -46,6 +46,7 @@
       "expo-font",
       "expo-sqlite",
       "@react-native-firebase/app",
+      "@react-native-firebase/crashlytics",
       "expo-build-properties",
       "expo-secure-store",
       "@react-native-community/datetimepicker",

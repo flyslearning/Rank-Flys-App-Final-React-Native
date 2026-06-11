@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { EbookAPI } from "../../api/ebook.api";
 import { EbookDb } from "../../db/ebookDb";
+import { recordError } from "../../utils/crashlytics";
 
 const { width } = Dimensions.get("window");
 
@@ -41,6 +42,7 @@ export default function BookDetailScreen({ route, navigation }: any) {
 
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const pulse = useRef(new Animated.Value(1)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
@@ -107,6 +109,7 @@ export default function BookDetailScreen({ route, navigation }: any) {
 
   const loadDetail = async () => {
     try {
+      setErrorMessage("");
       setLoading(true);
 
       const cached = EbookDb.getBookDetail?.(bookId);
@@ -114,24 +117,56 @@ export default function BookDetailScreen({ route, navigation }: any) {
 
       const res = await EbookAPI.getBookDetail(bookId);
       const data = res.data?.data || res.data;
+      if (!data || !data.book && !data.id) {
+        recordError(res.data, "BookDetailScreen: invalid book detail response");
+      }
 
       EbookDb.saveBookDetail?.(data);
       setDetail(data);
-    } catch (e: any) {
-      console.log("Book detail error:", e?.response?.data || e?.message || e);
-      Alert.alert("Error", "Book detail load nahi ho payi.");
+     } catch (e: any) {
+      const errorData = e?.response?.data || e?.message || e;
+
+      console.log("Book detail error:", errorData);
+      recordError(e, "BookDetailScreen: book detail load failed");
+
+      const cached = EbookDb.getBookDetail?.(bookId);
+
+      if (cached) {
+        setDetail(cached);
+        setErrorMessage("Internet/server issue hai. Cached book detail dikha rahe hain.");
+        return;
+      }
+
+      setErrorMessage("Book detail load nahi ho payi. Internet check karke retry karo.");
+
+      Alert.alert("Unable to Load", "Book detail load nahi ho payi. Please retry.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading && !detail) {
+  if ((loading || errorMessage) && !detail) {
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar barStyle="dark-content" backgroundColor={BG} />
+
         <View style={styles.center}>
-          <ActivityIndicator color={BLUE} size="large" />
-          <Text style={styles.loadingText}>Loading book...</Text>
+          {errorMessage ? (
+            <>
+              <Ionicons name="cloud-offline-outline" size={48} color="#94A3B8" />
+              <Text style={styles.errorTitle}>Unable to load book</Text>
+              <Text style={styles.errorText}>{errorMessage}</Text>
+
+              <Pressable style={styles.retryBtn} onPress={loadDetail}>
+                <Text style={styles.retryText}>Retry</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator color={BLUE} size="large" />
+              <Text style={styles.loadingText}>Loading book...</Text>
+            </>
+          )}
         </View>
       </SafeAreaView>
     );
@@ -213,7 +248,7 @@ export default function BookDetailScreen({ route, navigation }: any) {
           </Text>
         </View>
 
-        <Pressable onPress={loadDetail} style={styles.iconBtn}>
+        <Pressable disabled={loading} onPress={loadDetail} style={styles.iconBtn}>
           <Ionicons name="refresh" size={20} color={BLUE} />
         </Pressable>
       </View>
@@ -1106,4 +1141,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
   },
+  errorTitle: {
+  marginTop: 12,
+  color: DARK,
+  fontSize: 18,
+  fontWeight: "900",
+},
+errorText: {
+  marginTop: 8,
+  paddingHorizontal: 28,
+  color: MUTED,
+  fontSize: 13,
+  fontWeight: "700",
+  textAlign: "center",
+  lineHeight: 19,
+},
+retryBtn: {
+  marginTop: 16,
+  height: 44,
+  paddingHorizontal: 24,
+  borderRadius: 14,
+  backgroundColor: BLUE,
+  alignItems: "center",
+  justifyContent: "center",
+},
+retryText: {
+  color: "#FFFFFF",
+  fontSize: 14,
+  fontWeight: "900",
+},
 });

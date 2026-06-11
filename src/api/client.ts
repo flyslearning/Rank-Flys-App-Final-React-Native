@@ -6,6 +6,7 @@ import axios, {
 import axiosRetry from "axios-retry";
 import { storage } from "../utils/storage";
 import { useAuthStore } from "../store/auth.store";
+import { recordError } from "../utils/crashlytics";
 
 export const AUTH_BASE_URL = process.env.EXPO_PUBLIC_AUTH_API;
 export const TEST_BASE_URL = process.env.EXPO_PUBLIC_TEST_API;
@@ -192,6 +193,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
   (await storage.get<string>("refresh_token"));
 
     if (!latestRefreshToken) {
+      recordError(error, "client.ts: Missing refresh token");
       await useAuthStore.getState().clearTokens();
       return Promise.reject(error);
     }
@@ -207,6 +209,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
       response.data.refresh_token || response.data.refreshToken;
 
       if (!newAccessToken || !newRefreshToken) {
+      recordError(error, "client.ts: Refresh response missing tokens");
       return Promise.reject(error);
       }
 
@@ -232,6 +235,7 @@ const refreshTokenAndRetry = async (error: AxiosError) => {
       }
 
       console.log("REFRESH TOKEN ERROR", refreshError);
+      recordError(refreshError, "client.ts: Refresh Token Error");
 
       return Promise.reject(refreshError);
     } finally {

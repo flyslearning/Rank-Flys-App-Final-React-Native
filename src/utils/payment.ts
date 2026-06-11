@@ -5,6 +5,7 @@ import { mentorshipApi } from "../api/mentorship.api";
 import {
   createPersonalizedClassroomOrder,
 } from "../api/personalizedClassroom.api";
+import { recordError } from "./crashlytics";
 
 export const startPayment = async (params: {
   contentId: string;
@@ -42,6 +43,7 @@ export const startPayment = async (params: {
     params.onSuccess();
   } catch (error: any) {
     console.log("Payment error:", error?.response?.data || error?.message || error);
+    recordError(error, "payment.ts: Payment Error - startPayment");
     Alert.alert("Payment Failed", "Payment cancel ya fail ho gaya");
   }
 };
@@ -83,21 +85,25 @@ export const startMentorshipPayment = async (params: {
     const amount = Number(paymentOrder?.amount_paise || paymentOrder?.amount || 0);
 
     if (!bookingId) {
+      recordError(orderData, "payment.ts: Mentorship payment missing bookingId");
       Alert.alert("Error", "Booking ID backend se nahi mila.");
       return;
     }
 
     if (!keyId) {
+      recordError(orderData, "payment.ts: Mentorship payment missing keyId");
       Alert.alert("Error", "Razorpay key_id backend se nahi mila.");
       return;
     }
 
     if (!providerOrderId || !String(providerOrderId).startsWith("order_")) {
+      recordError(orderData, "payment.ts: Mentorship payment invalid providerOrderId");
       Alert.alert("Error", "Valid Razorpay order id backend se nahi mila.");
       return;
     }
 
     if (!amount || amount <= 0) {
+      recordError(orderData, "payment.ts: Mentorship payment invalid amount");
       Alert.alert("Error", "Payment amount invalid hai.");
       return;
     }
@@ -115,6 +121,7 @@ export const startMentorshipPayment = async (params: {
       "Mentorship payment error:",
       error?.response?.data || error?.description || error?.message || error
     );
+    recordError(error, "payment.ts: Mentorship Payment Error");
 
     const backendError =
       error?.response?.data?.error ||
@@ -177,26 +184,31 @@ export const startPersonalizedClassroomPayment = async (params: {
     const paymentOrderId = paymentOrder?.order_id;
 
     if (!plan?.id) {
+      recordError(orderData, "payment.ts: PC payment missing plan id");
       Alert.alert("Error", "Plan ID backend se nahi mila.");
       return;
     }
 
     if (!paymentOrderId) {
+      recordError(orderData, "payment.ts: PC payment missing paymentOrderId");
       Alert.alert("Error", "Internal payment order ID backend se nahi mila.");
       return;
     }
 
     if (!keyId) {
+      recordError(orderData, "payment.ts: PC payment missing keyId");
       Alert.alert("Error", "Razorpay key_id backend se nahi mila.");
       return;
     }
 
     if (!providerOrderId || !String(providerOrderId).startsWith("order_")) {
+      recordError(orderData, "payment.ts: PC payment invalid providerOrderId");
       Alert.alert("Error", "Valid Razorpay order id backend se nahi mila.");
       return;
     }
 
     if (!amount || amount <= 0) {
+      recordError(orderData, "payment.ts: PC payment invalid amount");
       Alert.alert("Error", "Payment amount invalid hai.");
       return;
     }
@@ -216,6 +228,7 @@ export const startPersonalizedClassroomPayment = async (params: {
       "PC payment error:",
       error?.response?.data || error?.description || error?.message || error
     );
+    recordError(error, "payment.ts: Personalized Classroom Payment Error");
 
     Alert.alert(
       "Payment Failed",

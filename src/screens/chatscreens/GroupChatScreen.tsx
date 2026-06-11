@@ -28,6 +28,7 @@ import { useChatStore } from "../../store/chat.store";
 import { ChatAPI } from "../../api/chat.api";
 import { useIsFocused } from "@react-navigation/native";
 import PollCard from "../../components/chat/PollCard";
+import { recordError } from "../../utils/crashlytics";
 
 const CHAT_WS = "wss://api.flyslearning.com/chat-ws/api/v1/chat";
 
@@ -43,6 +44,14 @@ const RED = "#EF4444";
 
 const DEBUG = false;
 const log = (...a: any[]) => DEBUG && console.log("[GROUP_CHAT]", ...a);
+const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Chat request timeout")), ms)
+    ),
+  ]);
+};
 
 type Msg = {
   id?: string;
@@ -214,6 +223,7 @@ export default function GroupChatScreen() {
   const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Status>("connecting");
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMoreOlder, setHasMoreOlder] = useState(true);
   const isFocused = useIsFocused();
@@ -519,12 +529,14 @@ const markRead = useCallback(async () => {
             });
           }
         } catch (e) {
-          log("WS_PARSE_ERROR", String(e));
-        }
+            log("WS_PARSE_ERROR", String(e));
+            recordError(e, "GroupChatScreen: websocket message parse error");
+          }
       };
 
       ws.onerror = (e) => {
         log("WS_ERROR", e);
+        recordError(new Error("WebSocket error"), "GroupChatScreen: websocket error");
         socketOpening.current = false;
       };
 
@@ -593,17 +605,21 @@ const markRead = useCallback(async () => {
     }
 
     try {
+      setErrorMessage("");
       setLoading(true);
       setStatus("connecting");
 
-      await joinChat();
+      await withTimeout(joinChat(), 15000);
 
-      const [history] = await Promise.all([
-      fetchMessages(),
-      fetchOnline(),
-      fetchPinnedMessages(),
-      fetchUnreadCount(),
-    ]);
+      const [history] = await withTimeout(
+        Promise.all([
+          fetchMessages(),
+          fetchOnline(),
+          fetchPinnedMessages(),
+          fetchUnreadCount(),
+        ]),
+        30000
+      );
 
       if (!mounted.current) return;
 
@@ -620,11 +636,22 @@ const markRead = useCallback(async () => {
       await connectSocket();
     } catch (e) {
       log("OPEN_CHAT_FAILED", String(e));
+      recordError(e, "GroupChatScreen: open chat failed");
+
       setStatus("offline");
+      setErrorMessage("Chat load nahi ho paaya. Internet check karke retry karo.");
     } finally {
       if (mounted.current) setLoading(false);
     }
   }, [token, goalClassID, joinChat, fetchMessages, fetchOnline,fetchPinnedMessages, fetchUnreadCount, connectSocket]);
+
+  const retryOpenChat = useCallback(() => {
+    initialLoaded.current = false;
+    setErrorMessage("");
+    setLoading(true);
+    openChat();
+  }, [openChat]);
+
 
   useEffect(() => {
     mounted.current = true;
@@ -692,7 +719,8 @@ useEffect(() => {
         setHasMoreOlder(false);
       }
     } catch (e) {
-      log("LOAD_OLDER_FAILED", String(e));
+  log("LOAD_OLDER_FAILED", String(e));
+  recordError(e, "GroupChatScreen: load older messages failed");
     } finally {
       setLoadingOlder(false);
     }
@@ -725,9 +753,10 @@ const handlePinMessage = useCallback(async (item: Msg) => {
 
     const res = await ChatAPI.pinnedMessages(goalClassID);
     setPinnedMessages(res.data?.pinned_messages || []);
-  } catch (e) {
-    console.log("PIN_MESSAGE_ERROR", e);
-  }
+      } catch (e) {
+      console.log("PIN_MESSAGE_ERROR", e);
+      recordError(e, "GroupChatScreen: pin message failed");
+    }
 }, [goalClassID]);
 const handleUnpinMessage = useCallback(async (item: Msg) => {
   const messageID = String(item.id || item.message_id || "");
@@ -738,9 +767,10 @@ const handleUnpinMessage = useCallback(async (item: Msg) => {
 
     const res = await ChatAPI.pinnedMessages(goalClassID);
     setPinnedMessages(res.data?.pinned_messages || []);
-  } catch (e) {
-    console.log("UNPIN_MESSAGE_ERROR", e);
-  }
+      } catch (e) {
+      console.log("UNPIN_MESSAGE_ERROR", e);
+      recordError(e, "GroupChatScreen: unpin message failed");
+    }
 }, [goalClassID]);
   const openMessageMenu = useCallback((item: Msg) => {
     setMenuMessage(item);
@@ -884,9 +914,10 @@ const scrollToMessage = useCallback(
     requestAnimationFrame(() => {
       listRef.current?.scrollToOffset({ offset: 0, animated: true });
     });
-  } catch (e) {
-    console.log("CREATE_POLL_ERROR", e);
-  } finally {
+      } catch (e) {
+      console.log("CREATE_POLL_ERROR", e);
+      recordError(e, "GroupChatScreen: create poll failed");
+    } finally {
     setCreatingPoll(false);
   }
 }, [pollQuestion, pollOptions, goalClassID]);
@@ -1076,6 +1107,16 @@ const scrollToMessage = useCallback(
               <ActivityIndicator size="large" color={BLUE} />
               <Text style={styles.loading}>Opening community...</Text>
             </View>
+          ) : errorMessage ? (
+            <View style={styles.center}>
+              <Ionicons name="cloud-offline-outline" size={56} color={RED} />
+              <Text style={styles.emptyTitle}>Unable to open chat</Text>
+              <Text style={styles.emptyText}>{errorMessage}</Text>
+
+              <TouchableOpacity style={styles.retryBtn} onPress={retryOpenChat}>
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <FlatList
               ref={listRef}
@@ -1092,21 +1133,29 @@ const scrollToMessage = useCallback(
                 goalClassID={goalClassID}
                 isTeacherOrAdmin={myRole.includes("teacher") || myRole.includes("admin")}
                 onVote={async (pollID, optionID) => {
-                  const res = await ChatAPI.votePoll(goalClassID, pollID, optionID);
-                  const poll = res.data?.poll;
+                  try {
+                    const res = await ChatAPI.votePoll(goalClassID, pollID, optionID);
+                    const poll = res.data?.poll;
 
-                  if (poll) {
-                    setMessages((prev) =>
-                      prev.map((m) =>
-                        String(m.poll_id) === String(poll.id)
-                          ? { ...m, poll }
-                          : m
-                      )
-                    );
+                    if (poll) {
+                      setMessages((prev) =>
+                        prev.map((m) =>
+                          String(m.poll_id) === String(poll.id)
+                            ? { ...m, poll }
+                            : m
+                        )
+                      );
+                    }
+                  } catch (e) {
+                    recordError(e, "GroupChatScreen: vote poll failed");
                   }
                 }}
                 onClose={async (pollID) => {
-                  await ChatAPI.closePoll(goalClassID, pollID);
+                  try {
+                    await ChatAPI.closePoll(goalClassID, pollID);
+                  } catch (e) {
+                    recordError(e, "GroupChatScreen: close poll failed");
+                  }
                 }}
               />
             );
@@ -1996,6 +2045,20 @@ highlightedBubble: {
   shadowRadius: 10,
   shadowOffset: { width: 0, height: 4 },
   elevation: 8,
+},
+retryBtn: {
+  marginTop: 16,
+  height: 44,
+  paddingHorizontal: 24,
+  borderRadius: 14,
+  backgroundColor: BLUE,
+  justifyContent: "center",
+  alignItems: "center",
+},
+retryText: {
+  color: "#FFFFFF",
+  fontSize: 14,
+  fontWeight: "900",
 },
   sendDisabled: { backgroundColor: "#93C5FD" },
 });

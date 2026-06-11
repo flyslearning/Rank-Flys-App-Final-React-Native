@@ -19,6 +19,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, EbookSeriesItem } from "../../types";
 import { EbookAPI } from "../../api/ebook.api";
 import { EbookDb } from "../../db/ebookDb";
+import { recordError } from "../../utils/crashlytics";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EbookSeries">;
 
@@ -76,6 +77,7 @@ export default function EbookSeriesScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertData, setAlertData] = useState({
     title: "",
@@ -113,6 +115,7 @@ export default function EbookSeriesScreen({ navigation }: Props) {
 
   const loadSeries = useCallback(async (showLoader = false) => {
     try {
+      setErrorMessage("");
       if (showLoader) setLoading(true);
 
       const cached = EbookDb.getSeries();
@@ -127,6 +130,9 @@ export default function EbookSeriesScreen({ navigation }: Props) {
       const seriesList = Array.isArray(res.data)
         ? res.data
         : res.data?.data || [];
+        if (!Array.isArray(seriesList)) {
+            recordError(res.data, "EbookSeriesScreen: invalid API response format");
+          }
 
       const sortedSeries = [...seriesList].sort(
         (a: any, b: any) =>
@@ -138,22 +144,32 @@ export default function EbookSeriesScreen({ navigation }: Props) {
 
       EbookDb.saveSeries(seriesWithCounts);
       setSeries(seriesWithCounts);
-    } catch (error: any) {
-      console.log("Ebook series not found:", error?.response?.data || error.message);
+          } catch (error: any) {
+          const errorData = error?.response?.data || error?.message || error;
 
-      const cached = EbookDb.getSeries();
+          console.log("Ebook series load error:", errorData);
 
-      if (cached.length > 0) {
-        setSeries(cached as any);
-      } else {
-        setAlertData({
-          title: "Not Found 😢",
-          message: "Ebook series not found",
-        });
+          recordError(error, "EbookSeriesScreen: load ebook series failed");
 
-        setAlertVisible(true);
-      }
-    } finally {
+          const cached = EbookDb.getSeries();
+
+          if (cached.length > 0) {
+            setSeries(cached as any);
+            setErrorMessage("Internet/server issue hai. Cached ebooks dikha rahe hain.");
+            return;
+          }
+
+          setErrorMessage(
+            "Ebook series load nahi ho paayi. Internet check karke retry karo."
+          );
+
+          setAlertData({
+            title: "Unable to Load",
+            message: "Ebook series load nahi ho paayi. Please retry.",
+          });
+
+          setAlertVisible(true);
+        } finally {
       setLoading(false);
     }
   }, []);
@@ -192,6 +208,7 @@ export default function EbookSeriesScreen({ navigation }: Props) {
       parentId: null,
       parentTitle: item.title,
     });
+    
   };
 
   const buySeries = (item: EbookSeriesWithCount) => {
@@ -417,12 +434,28 @@ export default function EbookSeriesScreen({ navigation }: Props) {
             </View>
           }
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons name="search-outline" size={44} color="#94a3b8" />
-              <Text style={styles.emptyTitle}>No ebooks found</Text>
-              <Text style={styles.emptyText}>Try searching another keyword.</Text>
-            </View>
-          }
+          <View style={styles.emptyBox}>
+            <Ionicons name="book-outline" size={44} color="#94a3b8" />
+
+            <Text style={styles.emptyTitle}>
+              {errorMessage ? "Unable to load ebooks" : "No ebooks found"}
+            </Text>
+
+            <Text style={styles.emptyText}>
+              {errorMessage || "Try searching another keyword."}
+            </Text>
+
+            {errorMessage ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.retryBtn}
+                onPress={() => loadSeries(true)}
+              >
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        }
         />
       </View>
     </SafeAreaView>
@@ -544,6 +577,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
+  retryBtn: {
+  marginTop: 16,
+  height: 44,
+  paddingHorizontal: 24,
+  borderRadius: 14,
+  backgroundColor: "#2563eb",
+  justifyContent: "center",
+  alignItems: "center",
+},
+retryText: {
+  color: "#ffffff",
+  fontSize: 14,
+  fontWeight: "900",
+},
   testBadge: {
     position: "absolute",
     right: 14,

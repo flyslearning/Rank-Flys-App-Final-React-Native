@@ -17,22 +17,15 @@ import {
   ScrollView,
   BackHandler,
 } from "react-native";
-
 import LottieView from "lottie-react-native";
-
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
 import { RootStackParamList } from "../../types";
-
 import AppButton from "../../components/AppButton";
-
 import { AuthAPI } from "../../api/auth.api";
-
 import { useAuthStore } from "../../store/auth.store";
-
 import CustomAlert from "../extrascreens/CustomAlert";
+import { recordError, setCrashUser } from "../../utils/crashlytics";
 
 type Props = NativeStackScreenProps<
   RootStackParamList,
@@ -165,6 +158,9 @@ export default function VerifyOtpScreen({
   if (error?.message === "Network Error") {
     return "No internet connection. Please check your network and try again.";
   }
+  if (error?.message === "Request timeout") {
+  return "OTP request timeout ho gaya. Internet slow hai, please retry karo.";
+  }
 
   return "Unable to send OTP right now. Please try again.";
 };
@@ -192,8 +188,20 @@ const getVerifyOtpErrorMessage = (error: any) => {
   if (error?.message === "Network Error") {
     return "No internet connection. Please check your network and try again.";
   }
+  if (error?.message === "Request timeout") {
+  return "Verification timeout ho gaya. Internet slow hai, please retry karo.";
+  }
 
   return "Verification failed. Please try again.";
+};
+
+const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Request timeout")), ms)
+    ),
+  ]);
 };
 
   // ANDROID BACK
@@ -267,6 +275,7 @@ const getVerifyOtpErrorMessage = (error: any) => {
   };
 
   const verifyOtp = async () => {
+    if (loading) return;
     const finalOtp = otp.join("");
 
     if (finalOtp.length < 6) {
@@ -281,10 +290,9 @@ const getVerifyOtpErrorMessage = (error: any) => {
     try {
       setLoading(true);
 
-      const res =
-        await AuthAPI.verifyOtp(
-          email,
-          finalOtp
+      const res = await withTimeout(
+          AuthAPI.verifyOtp(email, finalOtp),
+          20000
         );
 
       const accessToken =
@@ -295,17 +303,16 @@ const getVerifyOtpErrorMessage = (error: any) => {
         res.data?.refresh_token ||
         res.data?.refreshToken;
 
-      if (
-        !accessToken ||
-        !refreshToken
-      ) {
-        showAlert(
-          "Verification Failed",
-          "Token not received from server"
-        );
+      if (!accessToken || !refreshToken) {
+      recordError(res.data, "VerifyOtpScreen: token not received from server");
 
-        return;
-      }
+      showAlert(
+        "Verification Failed",
+        "Token not received from server"
+      );
+
+      return;
+    }
 
       await setTokens(
         accessToken,
@@ -314,8 +321,17 @@ const getVerifyOtpErrorMessage = (error: any) => {
       try {
       const profileRes = await AuthAPI.getProfile();
       await setUser(profileRes.data);
+      setCrashUser(
+        String(
+          profileRes.data?.id ||
+            profileRes.data?._id ||
+            profileRes.data?.user?.id ||
+            email
+        )
+      );
     } catch (e) {
       console.log("Profile fetch after login failed:", e);
+      recordError(e, "VerifyOtpScreen: profile fetch after login failed");
     }
 
       navigation.replace(
@@ -324,14 +340,16 @@ const getVerifyOtpErrorMessage = (error: any) => {
           ? "Onboarding"
           : "MainTabs"
       );
-    } catch (error: any) {
-  const message = getVerifyOtpErrorMessage(error);
+        } catch (error: any) {
+        const message = getVerifyOtpErrorMessage(error);
 
-  showAlert(
-    "Verification Failed",
-    message
-  );
-  } finally {
+        recordError(error, "VerifyOtpScreen: verify OTP failed");
+
+        showAlert(
+          "Verification Failed",
+          message
+        );
+      } finally {
       setLoading(false);
     }
   };
@@ -345,7 +363,7 @@ const getVerifyOtpErrorMessage = (error: any) => {
     try {
       setResending(true);
 
-      await AuthAPI.sendOtp(email);
+      await withTimeout(AuthAPI.sendOtp(email), 20000);
 
       // START TIMER
       setTimer(30);
@@ -354,8 +372,10 @@ const getVerifyOtpErrorMessage = (error: any) => {
         "OTP Sent",
         "OTP sent successfully."
       );
-    } catch (error: any) {
+       } catch (error: any) {
       const message = getSendOtpErrorMessage(error);
+
+      recordError(error, "VerifyOtpScreen: resend OTP failed");
 
       showAlert(
         "OTP Failed",

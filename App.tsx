@@ -11,6 +11,7 @@ import { useAuthStore } from "./src/store/auth.store";
 import { useAppStore } from "./src/store/app.store";
 import { setAuthToken } from "./src/api/client";
 import { initDatabase } from "./src/db/database";
+import { logCrash, recordError } from "./src/utils/crashlytics";
 
 const BOOT_TIMEOUT_MS = 5000;
 const STORAGE_TIMEOUT_MS = 3000;
@@ -67,7 +68,8 @@ export default function App() {
         setForceUpdate(true);
       }
     } catch (error) {
-      console.log("Force update check error:", error);
+    console.log("Force update check error:", error);
+    recordError(error, "App.tsx: Force update check error");
     }
   };
 
@@ -88,8 +90,9 @@ export default function App() {
     }, BOOT_TIMEOUT_MS);
 
     async function initApp() {
-      try {
-        await initDatabase();
+     try {
+    logCrash("App init started");
+    await initDatabase();
 
         await Promise.race([
           Promise.all([
@@ -110,11 +113,15 @@ export default function App() {
         }
 
         forceUpdateTimer = setTimeout(() => {
-          checkForceUpdate().catch(console.log);
+          checkForceUpdate().catch((error) => {
+              console.log("Force update timer error:", error);
+              recordError(error, "App.tsx: Force update timer error");
+            });
         }, FORCE_UPDATE_DELAY_MS);
-      } catch (error) {
+         } catch (error) {
         console.log("App Init Error:", error);
-      } finally {
+        recordError(error, "App.tsx: App Init Error");
+        }finally {
         if (!isMounted) return;
 
         useAuthStore.setState({ isReady: true });

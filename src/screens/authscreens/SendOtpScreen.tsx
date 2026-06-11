@@ -17,6 +17,7 @@ import AppInput from "../../components/AppInput";
 import AppButton from "../../components/AppButton";
 import CustomAlert from "../extrascreens/CustomAlert";
 import { AuthAPI } from "../../api/auth.api";
+import { recordError } from "../../utils/crashlytics";
 
 type Props = NativeStackScreenProps<RootStackParamList, "SendOtp">;
 
@@ -48,7 +49,19 @@ const getOtpErrorMessage = (error: any) => {
     return "No internet connection. Please check your network and try again.";
   }
 
+  if (error?.message === "OTP request timeout") {
+  return "OTP request timeout ho gaya. Internet slow hai, please retry karo.";
+  }
+
   return "Something went wrong. Please try again.";
+};
+const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("OTP request timeout")), ms)
+    ),
+  ]);
 };
 
 export default function SendOtpScreen({ navigation }: Props) {
@@ -70,6 +83,7 @@ export default function SendOtpScreen({ navigation }: Props) {
   };
 
   const sendOtp = async () => {
+    if (loading) return;
     const cleanEmail = email.trim().toLowerCase();
 
     if (!cleanEmail || !isValidEmail(cleanEmail)) {
@@ -80,11 +94,14 @@ export default function SendOtpScreen({ navigation }: Props) {
     try {
       setLoading(true);
 
-      await AuthAPI.sendOtp(cleanEmail);
+      await withTimeout(AuthAPI.sendOtp(cleanEmail), 20000);
 
       navigation.navigate("VerifyOtp", { email: cleanEmail });
     } catch (error: any) {
       const message = getOtpErrorMessage(error);
+
+      recordError(error, "SendOtpScreen: send OTP failed");
+
       showAlert("OTP Failed", message);
     } finally {
       setLoading(false);

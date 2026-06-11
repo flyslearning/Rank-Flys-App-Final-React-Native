@@ -20,6 +20,9 @@ import { useAuthStore } from "../../store/auth.store";
 import { getCachedPdfUrl, deleteCachedPdf } from "../../utils/pdfCache";
 import { AuthAPI } from "../../api/auth.api";
 import CustomAlert from "../extrascreens/CustomAlert";
+import { recordError } from "../../utils/crashlytics";
+
+const PDF_PREPARE_TIMEOUT_MS = 90000;
 
 type Props = NativeStackScreenProps<RootStackParamList, "PdfViewer">;
 
@@ -42,6 +45,7 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
   const [hiddenForPrivacy, setHiddenForPrivacy] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [localPdfUrl, setLocalPdfUrl] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const [alertState, setAlertState] = useState<AlertState>({
     visible: false,
@@ -87,8 +91,27 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
   }, [fileUrl]);
 
   useEffect(() => {
+  if (!isSecurePdf) {
+    recordError(
+      new Error(`Invalid PDF URL: ${fileUrl}`),
+      "PdfViewerScreen: invalid PDF URL"
+    );
+  }
+}, [isSecurePdf, fileUrl]);
+
+useEffect(() => {
+  if (isSecurePdf && !accessToken) {
+    recordError(
+      new Error("Access token missing for PDF"),
+      "PdfViewerScreen: access token missing"
+    );
+  }
+}, [isSecurePdf, accessToken]);
+
+  useEffect(() => {
     const preparePdf = async () => {
       try {
+        setErrorMessage("");
         setLoading(true);
 
         if (!isSecurePdf) {
@@ -101,11 +124,25 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
           return;
         }
 
-        const localUrl = await getCachedPdfUrl(fileUrl, accessToken);
+        const localUrl = await Promise.race([
+          getCachedPdfUrl(fileUrl, accessToken),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error("PDF prepare timeout")),
+              PDF_PREPARE_TIMEOUT_MS
+            )
+          ),
+        ]);
 
         setLocalPdfUrl(localUrl);
-      } catch (error) {
+        } catch (error) {
         console.log("PDF cache error:", error);
+
+        recordError(error, "PdfViewerScreen: PDF cache/prepare failed");
+
+        setErrorMessage(
+          "PDF download/open nahi ho payi. Internet check karke retry karo."
+        );
 
         setLoading(false);
 
@@ -189,6 +226,7 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
   }, [loading, rotateAnim, pulseAnim, dotAnim]);
 
   const handleRetry = async () => {
+    setErrorMessage("");
     setLoading(true);
     setTotalPages(0);
     setCurrentPage(0);
@@ -347,7 +385,7 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
       </View>
 
       <View style={styles.pdfWrap}>
-        {loading && (
+        {loading && !errorMessage && (
           <View style={styles.loader}>
             <Animated.View
               style={[
@@ -392,6 +430,19 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
             </View>
           </View>
         )}
+        {errorMessage && (
+          <View style={styles.loader}>
+            <Ionicons name="cloud-offline-outline" size={58} color="#94a3b8" />
+
+            <Text style={styles.errorTitle}>Unable to open PDF</Text>
+
+            <Text style={styles.errorText}>{errorMessage}</Text>
+
+            <TouchableOpacity style={styles.retryBtn} onPress={handleRetry}>
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {localPdfUrl && (
           <View style={styles.securePdfContainer}>
@@ -423,6 +474,7 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
               }}
               onError={async (error) => {
                 console.log("PDF load error:", error);
+                recordError(error, "PdfViewerScreen: PDF render/load error");
 
                 try {
                   setLoading(true);
@@ -435,7 +487,11 @@ export default function PdfViewerScreen({ route, navigation }: Props) {
                   setLocalPdfUrl(null);
                   setReloadKey((prev) => prev + 1);
                 } catch (refreshError) {
+                  recordError(refreshError, "PdfViewerScreen: session validate failed after PDF error");
+
                   setLoading(false);
+                  setErrorMessage("PDF open nahi ho payi. Please retry karo ya login dobara karo.");
+
                   handleSessionExpired();
                 }
               }}

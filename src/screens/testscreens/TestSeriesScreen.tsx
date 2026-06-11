@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, TestSeries } from "../../types";
 import { TestAPI } from "../../api/test.api";
+import { recordError } from "../../utils/crashlytics";
 import {
   getTestSeriesLocal,
   saveTestSeries,
@@ -78,6 +79,7 @@ export default function TestSeriesScreen({ navigation }: Props) {
   const [series, setSeries] = useState<SeriesWithCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertData, setAlertData] = useState({
     title: "",
@@ -85,8 +87,10 @@ export default function TestSeriesScreen({ navigation }: Props) {
   });
 
   const loadSeries = useCallback(async () => {
-    try {
-      const localData = getTestSeriesLocal() as SeriesWithCount[];
+  try {
+    setErrorMessage("");
+
+    const localData = getTestSeriesLocal() as SeriesWithCount[];
 
       if (localData.length > 0) {
         setSeries(localData);
@@ -96,7 +100,13 @@ export default function TestSeriesScreen({ navigation }: Props) {
       }
 
       const res = await TestAPI.getTestSeries();
-      const seriesList = res.data?.data || [];
+      const rawSeriesList = Array.isArray(res.data)
+        ? res.data
+        : res.data?.data;
+      if (!Array.isArray(rawSeriesList)) {
+        recordError(res.data, "TestSeriesScreen: invalid API response format");
+      }
+      const seriesList = Array.isArray(rawSeriesList) ? rawSeriesList : [];
 
       const sortedSeries = [...seriesList].sort(
         (a: any, b: any) =>
@@ -109,22 +119,32 @@ export default function TestSeriesScreen({ navigation }: Props) {
 
       const updatedLocalData = getTestSeriesLocal() as SeriesWithCount[];
       setSeries(updatedLocalData);
-    } catch (error: any) {
-      console.log("Test series not found:", error.response?.data || error.message);
+        } catch (error: any) {
+        const errorData = error?.response?.data || error?.message || error;
 
-      const localData = getTestSeriesLocal() as SeriesWithCount[];
+        console.log("Test series load error:", errorData);
 
-      if (localData.length > 0) {
-        setSeries(localData);
-      } else {
+        recordError(error, "TestSeriesScreen: load test series failed");
+
+        const localData = getTestSeriesLocal() as SeriesWithCount[];
+
+        if (localData.length > 0) {
+          setSeries(localData);
+          setErrorMessage("Internet/server issue hai. Cached test series dikha rahe hain.");
+          return;
+        }
+
+        setErrorMessage(
+          "Test series load nahi ho paayi. Internet check karke retry karo."
+        );
+
         setAlertData({
-          title: "Not Found 😢",
-          message: "Test series not found",
+          title: "Unable to Load",
+          message: "Test series load nahi ho paayi. Please retry.",
         });
 
         setAlertVisible(true);
-      }
-    } finally {
+      } finally {
       setLoading(false);
     }
   }, []);
@@ -371,12 +391,28 @@ export default function TestSeriesScreen({ navigation }: Props) {
             </View>
           }
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Ionicons name="search-outline" size={44} color="#94a3b8" />
-              <Text style={styles.emptyTitle}>No series found</Text>
-              <Text style={styles.emptyText}>Try searching another keyword.</Text>
-            </View>
-          }
+          <View style={styles.emptyBox}>
+            <Ionicons name="school-outline" size={44} color="#94a3b8" />
+
+            <Text style={styles.emptyTitle}>
+              {errorMessage ? "Unable to load test series" : "No series found"}
+            </Text>
+
+            <Text style={styles.emptyText}>
+              {errorMessage || "Try searching another keyword."}
+            </Text>
+
+            {errorMessage ? (
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.retryBtn}
+                onPress={loadSeries}
+              >
+                <Text style={styles.retryText}>Retry</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        }
         />
       </View>
     </SafeAreaView>
@@ -484,6 +520,20 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 999,
   },
+  retryBtn: {
+  marginTop: 16,
+  height: 44,
+  paddingHorizontal: 24,
+  borderRadius: 14,
+  backgroundColor: "#2563eb",
+  justifyContent: "center",
+  alignItems: "center",
+},
+retryText: {
+  color: "#ffffff",
+  fontSize: 14,
+  fontWeight: "900",
+},
   discountBadgeText: {
     color: "#ffffff",
     fontSize: 12,

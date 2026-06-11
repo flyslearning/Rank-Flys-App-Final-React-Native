@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { storage } from "../utils/storage";
 import { AUTH_BASE_URL, clearDefaultAuthorizationHeader, setDefaultAuthorizationHeader } from "../api/client";
 import { clearDataOnLogout } from "../utils/clearstorage";
+import { recordError, clearCrashUser } from "../utils/crashlytics";
 
 type AuthState = {
   accessToken: string | null;
@@ -82,8 +83,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isReady: true,
         isAuthenticated: !!accessToken && !!refreshToken,
       });
-    } catch (error) {
+       } catch (error) {
       console.log("Load tokens error:", error);
+      recordError(error, "auth.store.ts: Load tokens error");
 
       set({
         accessToken: null,
@@ -113,6 +115,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     logout: async () => {
     await clearDataOnLogout();
+    clearCrashUser();
 
     clearDefaultAuthorizationHeader();
 
@@ -157,13 +160,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const newRefreshToken = data.refresh_token || data.refreshToken;
 
       if (!newAccessToken || !newRefreshToken) {
+        recordError(data, "auth.store.ts: Refresh response missing tokens");
         return null;
       }
 
      await get().setTokens(newAccessToken, newRefreshToken);
 
     return newAccessToken;
-    } catch {
+    } catch (error) {
+      recordError(error, "auth.store.ts: Refresh Access Token Error");
       return null;
     }
       },

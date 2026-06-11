@@ -24,6 +24,7 @@ import { EbookAPI } from "../../api/ebook.api";
 import { EbookDb } from "../../db/ebookDb";
 import BookPaywall from "../../components/books/BookPaywall";
 import * as ScreenCapture from "expo-screen-capture";
+import { recordError } from "../../utils/crashlytics";
 
 const PAGE_LIMIT = 10;
 const A4_RATIO = 1.414;
@@ -100,6 +101,7 @@ export default function BookReaderScreen({ route, navigation }: any) {
   const [bookmarks, setBookmarks] = useState<any[]>([]);
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
   const scrollX = useRef(new Animated.Value(0)).current;
   const loadingScale = useRef(new Animated.Value(1)).current;
@@ -216,6 +218,7 @@ textPulse.start();
       setBookmarks(Array.isArray(data) ? data : []);
     } catch (error: any) {
       console.log("Bookmark API failed:", getApiMessage(error));
+      recordError(error, "BookReaderScreen: load bookmarks failed");
       setBookmarks([]);
     }
   }, [bookId]);
@@ -304,6 +307,7 @@ textPulse.start();
     };
   } catch (error) {
     console.log("Encrypted image cache failed:", error);
+    recordError(error, "BookReaderScreen: encrypted image cache failed");
 
     return {
       ...page,
@@ -336,7 +340,9 @@ textPulse.start();
     if (loadingRef.current || !pageFrom || pageFrom <= 0) return;
 
       try {
+        setErrorMessage("");
         loadingRef.current = true;
+        
         setLoading(true);
 
         const res = await EbookAPI.getBookPages(bookId, pageFrom, PAGE_LIMIT);
@@ -387,23 +393,32 @@ textPulse.start();
       }
 
         setNextFrom(data?.next_from || null);
-      } catch (error: any) {
-        console.log("Book pages API failed:", {
-          status: error?.response?.status,
-          data: error?.response?.data,
-          message: error?.message,
-        });
+          } catch (error: any) {
+          console.log("Book pages API failed:", {
+            status: error?.response?.status,
+            data: error?.response?.data,
+            message: error?.message,
+          });
 
-        const cached = EbookDb.getBookPages?.(bookId, pageFrom, PAGE_LIMIT) || [];
+          recordError(error, "BookReaderScreen: load book pages failed");
 
-        if (cached.length) {
-          setPages(cached);
-        } else {
-          setFallbackPage();
-        }
+          const cached = EbookDb.getBookPages?.(bookId, pageFrom, PAGE_LIMIT) || [];
 
-        setNextFrom(null);
-      } finally {
+          if (cached.length) {
+            setPages(cached);
+            setErrorMessage("Internet/server issue hai. Cached pages dikha rahe hain.");
+          } else {
+            setFallbackPage();
+
+            if (!coverImageUrl) {
+              setErrorMessage(
+                "Book pages load nahi ho paayi. Internet check karke retry karo."
+              );
+            }
+          }
+
+          setNextFrom(null);
+        } finally {
         loadingRef.current = false;
         setLoading(false);
       }
@@ -469,6 +484,7 @@ textPulse.start();
 EbookDb.saveBookPages?.(bookId, dbList);
     } catch (error: any) {
       console.log("Previous pages load failed:", getApiMessage(error));
+      recordError(error, "BookReaderScreen: load previous pages failed");
     } finally {
       loadingRef.current = false;
       setLoading(false);
@@ -505,6 +521,7 @@ const handleSaveProgress = async () => {
     );
   } catch (error: any) {
     console.log("Save progress failed:", getApiMessage(error));
+    recordError(error, "BookReaderScreen: save progress failed");
 
     Alert.alert(
       "Error",
@@ -544,6 +561,7 @@ const handleSaveProgress = async () => {
   } catch (error: any) {
     setBookmarks(oldBookmarks);
     console.log("Bookmark toggle API failed:", getApiMessage(error));
+    recordError(error, "BookReaderScreen: toggle bookmark failed");
   }
 };
 
@@ -557,6 +575,15 @@ const handleSaveProgress = async () => {
   currentPage.current = pageNo;
 
   await loadPages(initialFrom, true, pageNo);
+};
+const retryLoadPages = async () => {
+  const retryFrom = Math.max(1, Number(currentPage.current || startPage) - 4);
+
+  setErrorMessage("");
+  setPages([]);
+  setNextFrom(retryFrom);
+
+  await loadPages(retryFrom, true, currentPage.current || startPage);
 };
 
  const onMomentumEnd = (event: any) => {
@@ -720,34 +747,51 @@ const handleSaveProgress = async () => {
           )}
           scrollEventThrottle={16}
           ListEmptyComponent={
-            <View style={[styles.empty, { width: pageWidth, height: availableHeight }]}>
-              <Animated.View
-                  style={[
-                    styles.bigLoader,
-                    {
-                      transform: [
-                        { scale: loadingScale },
-                        { rotate: loaderSpin },
-                      ],
-                    },
-                  ]}
-                />
-              <Animated.Text
-                style={[
-                  styles.emptyText,
-                  {
-                    opacity: loadingTextOpacity,
-                  },
-                ]}
-              >
-                Loading Book...
-              </Animated.Text>
-              <Animated.Text style={[styles.waitText, { opacity: loadingTextOpacity }]}>
-                Please wait 10–15 seconds
-              </Animated.Text>
-            </View>
-            
-          }
+              <View style={[styles.empty, { width: pageWidth, height: availableHeight }]}>
+                {errorMessage ? (
+                  <>
+                    <Ionicons name="cloud-offline-outline" size={48} color="#94A3B8" />
+
+                    <Text style={styles.emptyTitle}>Unable to load book</Text>
+
+                    <Text style={styles.emptyText}>{errorMessage}</Text>
+
+                    <Pressable style={styles.retryBtn} onPress={retryLoadPages}>
+                      <Text style={styles.retryText}>Retry</Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <Animated.View
+                      style={[
+                        styles.bigLoader,
+                        {
+                          transform: [
+                            { scale: loadingScale },
+                            { rotate: loaderSpin },
+                          ],
+                        },
+                      ]}
+                    />
+
+                    <Animated.Text
+                      style={[
+                        styles.emptyText,
+                        {
+                          opacity: loadingTextOpacity,
+                        },
+                      ]}
+                    >
+                      Loading Book...
+                    </Animated.Text>
+
+                    <Animated.Text style={[styles.waitText, { opacity: loadingTextOpacity }]}>
+                      Please wait 10–15 seconds
+                    </Animated.Text>
+                  </>
+                )}
+              </View>
+            }
         />
       </View>
       
@@ -1198,5 +1242,24 @@ zoomInnerContent: {
   minHeight: "100%",
   alignItems: "center",
   justifyContent: "center",
+},
+emptyTitle: {
+  color: "#0F172A",
+  fontSize: 18,
+  fontWeight: "900",
+},
+retryBtn: {
+  marginTop: 12,
+  height: 44,
+  paddingHorizontal: 24,
+  borderRadius: 14,
+  backgroundColor: "#2563EB",
+  alignItems: "center",
+  justifyContent: "center",
+},
+retryText: {
+  color: "#FFFFFF",
+  fontSize: 14,
+  fontWeight: "900",
 },
 });

@@ -1,5 +1,6 @@
 import * as SQLite from "expo-sqlite";
 import { initStudySessionTable } from "./studySessionDb";
+import { recordError } from "../utils/crashlytics";
 
 export const db = SQLite.openDatabaseSync("app.db");
 
@@ -11,6 +12,9 @@ function safeExec(sql: string) {
   } catch (error) {
     console.log("DB exec error:", sql);
     console.log(error);
+
+    recordError(error, "database.ts: DB exec error");
+
     throw error;
   }
 }
@@ -55,19 +59,26 @@ function resetDatabaseTables() {
 }
 
 function runDbMigrations() {
-  const oldVersion = getDbVersion();
+  try {
+    const oldVersion = getDbVersion();
 
-  if (oldVersion >= DB_SCHEMA_VERSION) {
-    return;
+    if (oldVersion >= DB_SCHEMA_VERSION) {
+      return;
+    }
+
+    db.withTransactionSync(() => {
+      resetDatabaseTables();
+      setDbVersion(DB_SCHEMA_VERSION);
+    });
+  } catch (error) {
+    console.log("DB migration error:", error);
+    recordError(error, "database.ts: Database migration error");
+    throw error;
   }
-
-  db.withTransactionSync(() => {
-    resetDatabaseTables();
-    setDbVersion(DB_SCHEMA_VERSION);
-  });
 }
 
 export function initDatabase() {
+  try {
   safeExec(`
     CREATE TABLE IF NOT EXISTS app_meta (
       key TEXT PRIMARY KEY NOT NULL,
@@ -413,7 +424,7 @@ safeExec(`
   `);
   safeExec(`
   CREATE INDEX IF NOT EXISTS idx_pc_details_cached
-  ON personalized_classroom_details(cached_at);
+  ON personalized_classroom_products(cached_at);
 `);
 
 safeExec(`
@@ -421,5 +432,10 @@ safeExec(`
   ON personalized_classroom_home(cached_at);
 `);
 
-  initStudySessionTable();
+     initStudySessionTable();
+  } catch (error) {
+    console.log("Database init error:", error);
+    recordError(error, "database.ts: Database Error");
+    throw error;
+  }
 }

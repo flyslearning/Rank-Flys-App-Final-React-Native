@@ -19,6 +19,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList, EbookSeriesItem } from "../../types";
 import { EbookAPI } from "../../api/ebook.api";
 import { EbookDb } from "../../db/ebookDb";
+import { recordError } from "../../utils/crashlytics";
 
 type Props = NativeStackScreenProps<RootStackParamList, "StudyMaterial">;
 
@@ -31,6 +32,7 @@ export default function StudyMaterialScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertData, setAlertData] = useState({
     title: "",
@@ -53,6 +55,8 @@ export default function StudyMaterialScreen({ navigation }: Props) {
 
   const loadStudyMaterial = useCallback(async (showLoader = false) => {
     try {
+      setErrorMessage("");
+
       if (showLoader) setLoading(true);
 
       const cached = EbookDb.getStudyMaterial();
@@ -64,7 +68,13 @@ export default function StudyMaterialScreen({ navigation }: Props) {
 
       const res = await EbookAPI.getStudyMaterial();
 
-      const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
+      const rawList = Array.isArray(res.data) ? res.data : res.data?.data;
+
+        if (!Array.isArray(rawList)) {
+          recordError(res.data, "StudyMaterialScreen: invalid API response format");
+        }
+
+        const list = Array.isArray(rawList) ? rawList : [];
 
       const sorted = [...list].sort(
         (a: any, b: any) =>
@@ -74,24 +84,32 @@ export default function StudyMaterialScreen({ navigation }: Props) {
 
       EbookDb.saveStudyMaterial(sorted);
       setItems(sorted);
-    } catch (error: any) {
-      console.log(
-        "Study material not found:",
-        error?.response?.data || error.message
-      );
+       } catch (error: any) {
+        const errorData = error?.response?.data || error?.message || error;
 
-      const cached = EbookDb.getStudyMaterial();
+        console.log("Study material load error:", errorData);
 
-      if (cached.length > 0) {
-        setItems(cached as any);
-      } else {
+        recordError(error, "StudyMaterialScreen: load study material failed");
+
+        const cached = EbookDb.getStudyMaterial();
+
+        if (cached.length > 0) {
+          setItems(cached as any);
+          setErrorMessage("Internet/server issue hai. Cached study material dikha rahe hain.");
+          return;
+        }
+
+        setErrorMessage(
+          "Study material load nahi ho paaya. Internet check karke retry karo."
+        );
+
         setAlertData({
-          title: "Not Found 😢",
-          message: "Study material not found",
+          title: "Unable to Load",
+          message: "Study material load nahi ho paaya. Please retry.",
         });
+
         setAlertVisible(true);
-      }
-    } finally {
+      } finally {
       setLoading(false);
     }
   }, []);
@@ -262,8 +280,24 @@ export default function StudyMaterialScreen({ navigation }: Props) {
           ListEmptyComponent={
             <View style={styles.emptyBox}>
               <Ionicons name="folder-open-outline" size={46} color="#94a3b8" />
-              <Text style={styles.emptyTitle}>No study material found</Text>
-              <Text style={styles.emptyText}>Try refreshing or search another keyword.</Text>
+
+              <Text style={styles.emptyTitle}>
+                {errorMessage ? "Unable to load study material" : "No study material found"}
+              </Text>
+
+              <Text style={styles.emptyText}>
+                {errorMessage || "Try refreshing or search another keyword."}
+              </Text>
+
+              {errorMessage ? (
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={styles.retryBtn}
+                  onPress={() => loadStudyMaterial(true)}
+                >
+                  <Text style={styles.retryText}>Retry</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           }
         />
@@ -404,6 +438,20 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: "#2563eb",
   },
+  retryBtn: {
+  marginTop: 16,
+  height: 44,
+  paddingHorizontal: 24,
+  borderRadius: 14,
+  backgroundColor: "#2563eb",
+  justifyContent: "center",
+  alignItems: "center",
+},
+retryText: {
+  color: "#ffffff",
+  fontSize: 14,
+  fontWeight: "900",
+},
   infoIconWrap: {
     width: 42,
     height: 42,
