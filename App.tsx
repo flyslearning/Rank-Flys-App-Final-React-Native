@@ -13,6 +13,7 @@ import { setAuthToken } from "./src/api/client";
 import { initDatabase } from "./src/db/database";
 import { logCrash, recordError } from "./src/utils/crashlytics";
 
+
 const BOOT_TIMEOUT_MS = 5000;
 const STORAGE_TIMEOUT_MS = 3000;
 const MIN_SPLASH_MS = 1200;
