@@ -3,15 +3,11 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-
 import { RootStackParamList } from "../types";
 import { useChatStore } from "../store/chat.store";
-
 import { useAuthStore } from "../store/auth.store";
 import { useAppStore } from "../store/app.store";
-
 import IntroSliderScreen from "../screens/extrascreens/IntroSliderScreen";
-import SplashScreen from "../screens/extrascreens/SplashScreen";
 import SendOtpScreen from "../screens/authscreens/SendOtpScreen";
 import VerifyOtpScreen from "../screens/authscreens/VerifyOtpScreen";
 import OnboardingScreen from "../screens/authscreens/OnboardingScreen";
@@ -23,16 +19,13 @@ import GlobalSearchScreen from "../screens/GlobalSearchScreen";
 import PersonalizedClassroomDetailsScreen from "../screens/personalizedclassroom/PersonalizedClassroomDetailsScreen";
 import PersonalizedClassroomHomeScreen from "../screens/personalizedclassroom/PersonalizedClassroomHomeScreen";
 import PersonalizedClassroomPaymentSuccessScreen from "../screens/personalizedclassroom/PersonalizedClassroomPaymentSuccessScreen";
-
 import HomeScreen from "../screens/HomeScreen";
-
 import TestSeriesScreen from "../screens/testscreens/TestSeriesScreen";
 import TestsScreen from "../screens/testscreens/TestsScreen";
 import TestAttemptScreen from "../screens/testscreens/TestAttemptScreen";
 import ResultScreen from "../screens/testscreens/ResultScreen";
 import AttemptsScreen from "../screens/testscreens/PreviousAttemptsScreen";
 import ReelScreen from "../screens/reelscreens/ReelScreen";
-
 import EbookSeriesScreen from "../screens/ebookscreens/EbookSeriesScreen";
 import EbookNodesScreen from "../screens/ebookscreens/EbookNodesScreen";
 import PdfViewerScreen from "../screens/ebookscreens/PdfViewerScreen";
@@ -167,12 +160,24 @@ function BottomTabs() {
     const accessToken = useAuthStore((s) => s.accessToken);
     const hasSeenIntro = useAppStore((s) => s.hasSeenIntro);
     const user = useAuthStore((s: any) => s.user);
+    const isLoggedIn = useAuthStore((s) => s.isAuthenticated);
+    const isProfileCompleted = !!(
+    user?.first_name &&
+    user?.last_name &&
+    (
+    user?.goal_class_id ||
+    user?.goalClassID ||
+    user?.goal_id ||
+    user?.goalId ||
+    user?.class_id ||
+    user?.classId ||
+    user?.profile?.goal_class_id
+      )
+    );
     const openChat = useChatStore((s) => s.openChat);
     const closeChat = useChatStore((s) => s.closeChat);
-
     const goalClassID = useMemo(() => {
-      const payload: any = accessToken ? parseJwt(accessToken) : {};
-
+    const payload: any = accessToken ? parseJwt(accessToken) : {};
       return String(
         payload?.goal_class_id ||
           user?.goal_class_id ||
@@ -181,18 +186,14 @@ function BottomTabs() {
           ""
       );
     }, [accessToken, user]);
+
     useEffect(() => {
       if (!accessToken || !goalClassID) return;
-
       openChat(goalClassID);
-
       return () => {
         closeChat();
       };
     }, [accessToken, goalClassID, openChat, closeChat]);
-    
-
-    const isLoggedIn = useAuthStore((s) => s.isAuthenticated);
 
   return (
     <NavigationContainer>
@@ -206,9 +207,11 @@ function BottomTabs() {
           </>
         ) : (
           <>
-            <Stack.Screen name="MainTabs" component={BottomTabs} />
-
-            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            {isProfileCompleted ? (
+              <Stack.Screen name="MainTabs" component={BottomTabs} />
+            ) : (
+              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            )}
 
             <Stack.Screen
               name="TestSeries"

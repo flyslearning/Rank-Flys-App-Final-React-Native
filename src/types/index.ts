@@ -1,44 +1,116 @@
 export type RootStackParamList = {
+  IntroSlider: undefined;
 
   SendOtp: undefined;
   VerifyOtp: { email: string };
-   MainTabs: undefined;
+
+  MainTabs: undefined;
   Onboarding: undefined;
+
   Home: undefined;
+
   TestSeries: undefined;
   Tests: { seriesId: string };
+
   TestAttempt: {
-  testId: string;
-  seriesId: string;
-  duration_minutes?: number;
-  durationMinutes?: number;
-  duration?: number;
+    testId: string;
+    seriesId: string;
+    duration_minutes?: number;
+    durationMinutes?: number;
+    duration?: number;
   };
+
   Attempts: { testId: string };
   Result: { attemptId: string };
-   EbookSeries: undefined;
-   StudyMaterial: undefined;
+
+  EbookSeries: undefined;
+  StudyMaterial: undefined;
+
   EbookNodes: {
     seriesId: string;
     seriesTitle: string;
     parentId?: string | null;
     parentTitle?: string;
   };
-   PdfViewer: {
+
+  PdfViewer: {
     title: string;
     fileUrl: string;
   };
-    EbookPageViewer: {
+
+  EbookPageViewer: {
     title: string;
     pageBaseUrl: string;
     totalPages: number;
   };
 
-   CheckoutScreen: {
+  CheckoutScreen: {
     item: any;
     content_id: string;
     content_type: "ebook_series" | "test_series" | "mentorship_series";
   };
+
+  Profile: undefined;
+  "Study Tools": undefined;
+  SyllabusTracker: undefined;
+  StudyPlanner: undefined;
+  StudyTechnique: undefined;
+  FlashCard: undefined;
+
+  StudyRoom: undefined;
+  StudyStats: undefined;
+  SessionHistory: undefined;
+
+  Scholarship: undefined;
+  "Explore Scholarships": undefined;
+
+  Mentorship: undefined;
+  "Mentorship Plans": undefined;
+  "My Mentor": undefined;
+
+  "Contact Us": undefined;
+
+  DateSelect: undefined;
+  BookingReview: undefined;
+  BookingSuccess: undefined;
+  MyBookings: undefined;
+
+  RazorpayWebView: {
+    paymentUrl?: string;
+    orderId?: string;
+    amount?: number;
+  };
+
+  BooksLibrary: undefined;
+
+  BookDetail: {
+    bookId?: string;
+    book?: any;
+  };
+
+  BookReader: {
+    bookId?: string;
+    book?: any;
+    title?: string;
+    fileUrl?: string;
+  };
+
+  LibraryPassPlans: undefined;
+  FlysLibrary: undefined;
+
+  GlobalSearch: undefined;
+
+  PersonalizedClassroomDetails: undefined;
+  PersonalizedClassroomHome: undefined;
+  PersonalizedClassroomPaymentSuccess: undefined;
+};
+
+export type BottomTabParamList = {
+  Home: undefined;
+  Connect: undefined;
+  Flys: undefined;
+  Study: undefined;
+  Doubt: undefined;
 };
 
 export type UserProfile = {
@@ -103,6 +175,7 @@ export type ResponseItem = {
   selected_option: number | null;
   time_spent_seconds: number;
 };
+
 export type EbookSeriesItem = {
   id: string;
   title: string;

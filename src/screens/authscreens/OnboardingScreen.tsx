@@ -163,10 +163,21 @@ export default function OnboardingScreen({ navigation }: Props) {
       }
 
       const profileRes = await AuthAPI.getProfile();
-      await setUser(profileRes.data);
+        await setUser({
+          ...profileRes.data,
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          goal_id: goalId,
+          class_id: classId,
+          goal_class_id: classId,
+        });
+
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "MainTabs" as never }],
+        });
 
 
-      navigation.replace("MainTabs");
     } catch {
       Alert.alert("Profile update failed");
     } finally {
