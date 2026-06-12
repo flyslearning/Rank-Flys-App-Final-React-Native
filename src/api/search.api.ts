@@ -1,6 +1,7 @@
 import { EbookAPI } from "./ebook.api";
 import { TestAPI } from "./test.api";
 import { mentorshipApi } from "./mentorship.api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type GlobalSearchItem = {
   id: string;
@@ -9,6 +10,10 @@ export type GlobalSearchItem = {
   subtitle?: string;
   raw?: any;
 };
+
+const SEARCH_CACHE_KEY = "global_search_cache_v2";
+const SEARCH_CACHE_TIME_KEY = "global_search_cache_time_v2";
+const SEARCH_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 
 const normalize = (value?: any) => {
   return String(value || "").toLowerCase().trim();
@@ -21,10 +26,29 @@ const getList = (res: any) => {
   return [];
 };
 
-export async function fetchSearchData(): Promise<GlobalSearchItem[]> {
-  const results: GlobalSearchItem[] = [];
-
+export async function fetchSearchData(
+  forceRefresh: boolean = false
+): Promise<GlobalSearchItem[]> {
   try {
+    const now = Date.now();
+
+    if (!forceRefresh) {
+      const cachedData = await AsyncStorage.getItem(SEARCH_CACHE_KEY);
+      const cachedTime = await AsyncStorage.getItem(SEARCH_CACHE_TIME_KEY);
+
+      const lastCachedAt = cachedTime ? Number(cachedTime) : 0;
+      const cacheAge = now - lastCachedAt;
+
+      if (cachedData && lastCachedAt > 0 && cacheAge < SEARCH_CACHE_TTL) {
+        console.log("GLOBAL SEARCH: CACHE USED");
+        return JSON.parse(cachedData);
+      }
+    }
+
+    console.log("GLOBAL SEARCH: API CALLED");
+
+    const results: GlobalSearchItem[] = [];
+
     const [ebookRes, studyRes, testRes, mentorshipRes] =
       await Promise.allSettled([
         EbookAPI.getSeries(),
@@ -97,9 +121,24 @@ export async function fetchSearchData(): Promise<GlobalSearchItem[]> {
       });
     }
 
-    return removeDuplicates(results);
+    const finalData = removeDuplicates(results);
+
+    await AsyncStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify(finalData));
+    await AsyncStorage.setItem(SEARCH_CACHE_TIME_KEY, String(now));
+
+    console.log("GLOBAL SEARCH: CACHE SAVED", finalData.length);
+
+    return finalData;
   } catch (error) {
     console.log("Fetch search data error:", error);
+
+    const cachedData = await AsyncStorage.getItem(SEARCH_CACHE_KEY);
+
+    if (cachedData) {
+      console.log("GLOBAL SEARCH: FALLBACK CACHE USED");
+      return JSON.parse(cachedData);
+    }
+
     return [];
   }
 }
@@ -119,11 +158,7 @@ export function filterSearchData(
       item.raw?.description || item.raw?.short_description
     );
 
-    return (
-      title.includes(q) ||
-      subtitle.includes(q) ||
-      description.includes(q)
-    );
+    return title.includes(q) || subtitle.includes(q) || description.includes(q);
   });
 }
 
@@ -132,6 +167,7 @@ function removeDuplicates(data: GlobalSearchItem[]) {
 
   data.forEach((item) => {
     const key = `${item.type}-${item.id}`;
+
     if (!map.has(key)) {
       map.set(key, item);
     }
