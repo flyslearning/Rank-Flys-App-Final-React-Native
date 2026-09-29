@@ -95,8 +95,13 @@ android {
         applicationId 'com.RankFly.testseries'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
+<<<<<<< HEAD
         versionCode 55
         versionName "6.0.30"
+=======
+        versionCode 44
+        versionName "6.0.22"
+>>>>>>> 683febf (changes)
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
